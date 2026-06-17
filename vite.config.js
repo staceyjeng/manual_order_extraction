@@ -1,6 +1,8 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { createHmac } from 'crypto'
+import { readdirSync, existsSync } from 'fs'
+import { resolve } from 'path'
 import OAuth from 'oauth-1.0a'
 
 function makeOAuth(env) {
@@ -63,6 +65,20 @@ function netsuitePlugin(env) {
   return {
     name: 'netsuite-proxy',
     configureServer(server) {
+      server.middlewares.use('/api/test-pdfs', (req, res) => {
+        if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
+        try {
+          const dir = resolve(process.cwd(), 'public/test-pdfs');
+          if (!existsSync(dir)) { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('[]'); return; }
+          const files = readdirSync(dir).filter(f => f.toLowerCase().endsWith('.pdf'));
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(files));
+        } catch(e) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end('[]');
+        }
+      });
+
       server.middlewares.use('/api/netsuite/whoami', async (req, res) => {
         if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
         try {

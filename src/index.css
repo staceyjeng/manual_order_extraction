@@ -2,8 +2,8 @@
   /* App color tokens — light mode */
   --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
 
-  --color-background-primary: #ffffff;
-  --color-background-secondary: #f7f7f8;
+  --color-background-primary: #f0f0f0;
+  --color-background-secondary: #eceef1;
   --color-background-success: #f0fdf4;
   --color-background-danger: #fef2f2;
   --color-background-warning: #fffbeb;
@@ -32,6 +32,7 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* dark mode disabled — remove these comments to re-enable
 @media (prefers-color-scheme: dark) {
   :root {
     --color-background-primary: #1a1b23;
@@ -55,6 +56,7 @@
     --color-text-warning: #fcd34d;
   }
 }
+*/
 
 * {
   box-sizing: border-box;
@@ -62,8 +64,17 @@
 
 body {
   margin: 0;
-  background: var(--color-background-primary);
+  min-height: 100vh;
+  background: #ebebeb;
 }
+
+/* dark mode disabled
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #1a1b23;
+  }
+}
+*/
 
 #root {
   max-width: 760px;
