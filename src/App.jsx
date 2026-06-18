@@ -59,7 +59,7 @@ const S = {
 };
 
 export default function App() {
-  const [retailer, setRetailer] = useState("BJ's Wholesale Club");
+  const [retailer, setRetailer] = useState("");
   const [shipMethod, setShipMethod] = useState("Route");
   const [orderStatus, setOrderStatus] = useState("Pending Fulfillment");
   const [memo, setMemo] = useState("");
@@ -130,7 +130,7 @@ export default function App() {
     return null;
   },[]);
 
-  const handleRetailer=(r)=>{setRetailer(r);setShipMethod(RETAILERS[r].shipMethod);setOrderStatus(RETAILERS[r].status);};
+  const handleRetailer=(r)=>{setRetailer(r);if(RETAILERS[r]){setShipMethod(RETAILERS[r].shipMethod);setOrderStatus(RETAILERS[r].status);}};
 
   useEffect(() => {
     if (result && rows.length) initApproval(rows, retailer, shipMethod, memo, orderStatus);
@@ -437,7 +437,7 @@ export default function App() {
   };
 
   // Overlay current settings onto stored rows so changing dropdowns updates results instantly
-  const rc = RETAILERS[retailer];
+  const rc = RETAILERS[retailer] || {};
   const effectiveRows = rows.map(r => ({
     ...r,
     "Ship Method": shipMethod,
@@ -477,6 +477,7 @@ export default function App() {
           <div>
             <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Retailer</label>
             <select style={{...S.select,padding:"7px 10px",fontSize:13}} value={retailer} onChange={e=>handleRetailer(e.target.value)} disabled={busy}>
+              <option value="" disabled>Select Retailer</option>
               {Object.keys(RETAILERS).map(r=><option key={r}>{r}</option>)}
             </select>
           </div>
