@@ -4,20 +4,24 @@ import JSZip from "jszip";
 
 const RETAILERS = {
   "BJ's Wholesale Club": { nsCustomer: "BJs Wholesale Corporate : BJs Wholesale", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No" },
+  "Cost Plus World Market": { nsCustomer: "Cost Plus World Market", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
+  "Gilt": { nsCustomer: "Gilt", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
   "Global New Beginnings": { nsCustomer: "Global New Beginnings Inc.", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", type: "gnb" },
   "Hy-Vee": { nsCustomer: "Hy-Vee", shipMethod: "ROUTEPPD", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", orderUnit: "cases" },
-  "TJ Maxx Canada": { nsCustomer: "TJ Maxx Canada", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No" },
+  "Imperial Distributors Inc.": { nsCustomer: "Imperial Distributors Inc.", shipMethod: "ROUTEPPD", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", defaultMemo: "Frgt Terms :$1000 Prepaid", hideCols: ["Freight Account #","SCAC"] },
+  "Jungle Jims Market Inc": { nsCustomer: "Jungle Jims Market Inc", shipMethod: "UPS Ground", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", defaultMemo: "Packing slip or invoice must be on the outside of the package, with the department specified. Jungle Jim's does not accept shipments from UPS freight. UPS Ground is Fine.", hideCols: ["Customer Part Number","Freight Account #","SCAC"], showCols: {"Items": ["Department"]} },
+  "Mark-It Smart Inc.": { nsCustomer: "Mark-It Smart Inc.", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
+  "Sur La Table": { nsCustomer: "Sur La Table", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
+  "TJ Maxx Canada": { nsCustomer: "TJ Maxx Canada", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
+  "Verdi Commerce LLC": { nsCustomer: "Verdi Commerce LLC", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
 };
 const SHIP_METHODS = ["Collect","DPP","FedEx 2Day","FedEx Ground","FedEx Home Delivery","FedEx International Econ","FedEx SmartPost","Fedex Standard Overnight","Route","ROUTEPPD","UPS 2-Day","UPS 3-Day","UPS Express Saver","UPS Ground","UPS Overnight","UPS Surepost","USPS","USPS Ground Advantage"];
 const STATUSES = ["Pending Fulfillment","Pending Approval"];
 const CSV_HEADERS = ["Order #","NS SKU","Date","Quantity","Rate","Amount","Is EDI Sent","PO Number","NS CUSTOMER","Price Level","Status","Ship Date","Cancel Date","Must Arrive By Date","Name","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo"];
 const IM_KEY = "item-master-data";
 const TABS_PREVIEW = [
-  { label: "Order", cols: ["Order #","Date","PO Number","Status","Price Level","Is EDI Sent"] },
+  { label: "Header", cols: ["Order #","Date","Is EDI Sent","PO Number","NS CUSTOMER","Price Level","Status","Ship Date","Cancel Date","Must Arrive By Date","Name","Address 1","Address 2","City","State","Zip","Country","Ship Method","Freight Account #","SCAC","Memo"] },
   { label: "Items", cols: ["NS SKU","Customer Part Number","Quantity","Rate","Amount"] },
-  { label: "Dates", cols: ["Ship Date","Cancel Date","Must Arrive By Date"] },
-  { label: "Ship to", cols: ["Name","Address 1","Address 2","City","State","Zip","Country"] },
-  { label: "Settings", cols: ["NS CUSTOMER","Ship Method","Freight Account #","SCAC","Memo"] },
 ];
 
 function parseCsvRow(line){const vals=[];let cur="",inQ=false;for(let i=0;i<line.length;i++){const ch=line[i];if(inQ){if(ch==='"'&&line[i+1]==='"'){cur+='"';i++;}else if(ch==='"'){inQ=false;}else{cur+=ch;}}else{if(ch==='"'){inQ=true;}else if(ch===','){vals.push(cur);cur="";}else{cur+=ch;}}}vals.push(cur);return vals;}
@@ -26,16 +30,25 @@ function esc(v){if(v===null||v===undefined)return "";const s=String(v);return(s.
 function buildCSV(rows){return[CSV_HEADERS.join(","),...rows.map(r=>CSV_HEADERS.map(h=>esc(r[h])).join(","))].join("\n");}
 const GNB_CSV_HEADERS=["Order #","NS SKU","Customer Part Number","Date","Quantity","Rate","Amount","Is EDI Sent","PO Number","NS CUSTOMER","Price Level","Status","Ship Date","Cancel Date","Must Arrive By Date","Name","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Freight Account #","SCAC","Memo"];
 function buildGnbCSV(rows){return[GNB_CSV_HEADERS.join(","),...rows.map(r=>GNB_CSV_HEADERS.map(h=>esc(r[h])).join(","))].join("\n");}
+const IMPERIAL_CSV_HEADERS=["Order #","NS SKU","Customer Part Number","Date","Quantity","Rate","Amount","Is EDI Sent","PO Number","NS CUSTOMER","Price Level","Status","Ship Date","Cancel Date","Must Arrive By Date","Name","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo"];
+function buildImperialCSV(rows){return[IMPERIAL_CSV_HEADERS.join(","),...rows.map(r=>IMPERIAL_CSV_HEADERS.map(h=>esc(r[h])).join(","))].join("\n");}
+const JJ_CSV_HEADERS=["Order #","NS SKU","Date","Quantity","Rate","Amount","Is EDI Sent","PO Number","NS CUSTOMER","Department","Price Level","Status","Ship Date","Cancel Date","Must Arrive By Date","Name","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo"];
+function buildJjCSV(rows){return[JJ_CSV_HEADERS.join(","),...rows.map(r=>JJ_CSV_HEADERS.map(h=>esc(r[h])).join(","))].join("\n");}
 function fmtDate(d){if(!d)return d;const p=String(d).split("/");if(p.length===3&&p[2].length===2){const y=parseInt(p[2],10);p[2]=y<=49?`20${p[2].padStart(2,"0")}`:`19${p[2].padStart(2,"0")}`;}return p.join("/");}
 function dlCSV(content,name){const b=new Blob(["﻿"+content],{type:"text/csv;charset=utf-8;"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
 function isoToMDY(iso){if(!iso)return "";const[y,m,d]=iso.split("-");return `${parseInt(m)}/${parseInt(d)}/${y}`;}
 function localISODate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function addDays(ds,n){if(!ds)return "";const[m,d,y]=ds.split("/").map(Number);const dt=new Date(y,m-1,d);dt.setDate(dt.getDate()+n);return `${String(dt.getMonth()+1).padStart(2,"0")}/${String(dt.getDate()).padStart(2,"0")}/${dt.getFullYear()}`;}
 function subBizDays(ds,n){if(!ds)return "";const[m,d,y]=ds.split("/").map(Number);const dt=new Date(y,m-1,d);let rem=n;while(rem>0){dt.setDate(dt.getDate()-1);const dow=dt.getDay();if(dow!==0&&dow!==6)rem--;}return `${String(dt.getMonth()+1).padStart(2,"0")}/${String(dt.getDate()).padStart(2,"0")}/${dt.getFullYear()}`;}
+function addBizDays(ds,n){if(!ds)return "";const[m,d,y]=ds.split("/").map(Number);const dt=new Date(y,m-1,d);let rem=n;while(rem>0){dt.setDate(dt.getDate()+1);const dow=dt.getDay();if(dow!==0&&dow!==6)rem--;}return `${String(dt.getMonth()+1).padStart(2,"0")}/${String(dt.getDate()).padStart(2,"0")}/${dt.getFullYear()}`;}
 
 const PROMPT=`Extract data from this purchase order PDF. Return ONLY valid JSON, no markdown, no explanation.\n\n{"poNumber":"","orderDate":"MM/DD/YYYY","deliveryDate":"MM/DD/YYYY","shipDate":"MM/DD/YYYY or empty","cancelDate":"MM/DD/YYYY or empty","mustArriveByDate":"MM/DD/YYYY or empty","shipToName":"","shipToAttention":"","shipToAddress1":"","shipToAddress2":"","shipToCity":"","shipToState":"2-letter","shipToZip":"","shipToCountry":"2-letter","memo":"","lineItems":[{"upc":"","vendorItemNum":"","quantity":0,"unitPrice":0,"description":""}]}\n\nRules: mustArriveByDate=deliveryDate if only one date. shipDate/cancelDate=empty if not stated. memo=any delivery appointment or scheduling note on the PO (e.g. "Vendor to call Shipping Location for appointment"); leave empty if none. Extract ALL lines. ONLY JSON.`;
 
 const HY_VEE_PROMPT=`Extract data from this Hy-Vee purchase order PDF. Return ONLY valid JSON, no markdown, no explanation.\n\n{"poNumber":"","orderDate":"MM/DD/YYYY","mustArriveByDate":"MM/DD/YYYY","shipToName":"","shipToAttention":"","shipToAddress1":"","shipToAddress2":"","shipToCity":"","shipToState":"2-letter","shipToZip":"","shipToCountry":"2-letter","memo":"","lineItems":[{"mfgNum":"","prodNum":"","cases":0,"masterPack":0,"netCostPerCase":0,"description":""}]}\n\nRules: Each line item spans two rows. Row 1: 6-digit MFG# (in VENDOR column), Master Pack/Size, Order Code. Row 2: ORDER QTY (cases ordered), ORDER UNIT (CASES), 5-digit PROD#, description, then cost columns. mfgNum=6-digit MFG# from row 1. prodNum=5-digit PROD# from row 2. cases=ORDER QTY integer. masterPack=the integer before the backslash in the MASTER PACK/SIZE field (e.g. "6\\1EA-12X5" → 6). netCostPerCase=NET COST column value (third cost column). mustArriveByDate=SCHEDULE SHIPMENT TO ARRIVE ON date. memo=always empty string (ignore SPECIAL ALLOWANCES/MESSAGES). Extract ALL line items. ONLY JSON.`;
+
+const IMPERIAL_PROMPT=`Extract data from this Imperial Distributors purchase order PDF. Return ONLY valid JSON, no markdown, no explanation.\n\n{"poNumber":"","orderDate":"MM/DD/YYYY","mustArriveByDate":"MM/DD/YYYY","shipToName":"","shipToAddress1":"","shipToAddress2":"","shipToCity":"","shipToState":"2-letter","shipToZip":"","shipToCountry":"US","lineItems":[{"itemNum":"","vendorSku":"","gtin":"","csePck":0,"quantity":0,"unitPrice":0}]}\n\nRules: poNumber=PO No. value. orderDate=Order Date in MM/DD/YYYY (e.g. 6/02/26 → 6/02/2026). mustArriveByDate=Expected Arrival Date in MM/DD/YYYY. shipToName=ship-to company name. shipToAddress1=street address. shipToAddress2=warehouse/location name if present (e.g. Worcester Warehouse); empty string if none. lineItems: extract ALL lines from item table; ignore the *** Note *** page. itemNum=Item_# column (numeric customer part number, e.g. 118667). vendorSku=SKU after the "/" in the Mfr.No field (e.g. DST200GBAQ04); empty string if missing or cut off. gtin=dashed barcode in the Mfr.No field (e.g. 008-10051-85598-2). csePck=Pck column value (items per case, e.g. 4). quantity=Piece Qty column (total pieces not cases). unitPrice=Base Cost W/ OI column (per-piece price). ONLY JSON.`;
+
+const JJ_PROMPT=`Extract data from this Jungle Jim's purchase order PDF. Return ONLY valid JSON, no markdown, no explanation.\n\n{"poNumber":"","orderDate":"MM/DD/YYYY","shipToName":"","shipToAddress1":"","shipToAddress2":"","shipToCity":"","shipToState":"2-letter","shipToZip":"","shipToCountry":"2-letter","deliveryInstructions":"","lineItems":[{"upc":"11 digits","department":"","quantity":0,"unitPrice":0,"description":""}]}\n\nRules: poNumber=Purchase Order number. orderDate=Order Date in MM/DD/YYYY. shipToName=ship-to company name (e.g. JUNGLE JIMS EASTGATE). deliveryInstructions=text after "Delivery Instructions:" label on the PO; empty string if none. lineItems: extract ALL lines. upc=first 11 digits of the UPC column only. department=Dpt column value (e.g. 63). quantity=Unit/Lbs column (total units, NOT cases). unitPrice=Cost/Un column. ONLY JSON.`;
 
 const GNB_PROMPT=`This is a Global New Beginnings (GNBI) document. Identify its type and extract accordingly. Return ONLY valid JSON, no markdown, no explanation.\n\nIf this is a PURCHASE ORDER (has "PURCHASE ORDER" heading, a PO # field, and SKU line items with unit cost):\n{"docType":"po","poNumber":"number only e.g. 3320","orderDate":"MM/DD/YYYY","shipDate":"MM/DD/YYYY","sku":"exact SKU string e.g. RSMS150GBRR24","unitCost":0.0000}\n\nIf this is a DISTRIBUTION SHEET (table of fulfillment center rows with a Quill P.O. # column and ship-to addresses):\n{"docType":"distro","gnbiPoNumber":"","itemNum":"Item # value e.g. RSMS150GBRR24","quillSkuNum":"Quill SKU # value e.g. 3171196","primaryShipDate":"MM/DD/YYYY","locations":[{"quillPoNum":"e.g. XSYI66-1","name":"full center name e.g. Quill Fulfillment Center #472","address1":"street address line 1","address2":"street address line 2 if present else empty","city":"","state":"2-letter","zip":"","country":"US","quantity":0,"shipMethod":"Fed Ex Ground or UPS Ground","shipDate":"MM/DD/YYYY"}]}\n\nDistro rules: exclude rows where quantity=0. shipMethod must be exactly "Fed Ex Ground" or "UPS Ground" as shown. shipDate=the "Latest Acceptable Ship Date" for that row; if blank use primaryShipDate. ONLY JSON.`;
 
@@ -81,7 +94,7 @@ export default function App() {
   const [busyMsg, setBusyMsg] = useState("");
   const [result, setResult] = useState(null);
   const [rows, setRows] = useState([]);
-  const [previewTab, setPreviewTab] = useState("Order");
+  const [previewTab, setPreviewTab] = useState("Header");
   const [err, setErr] = useState("");
   const [settingsTab, setSettingsTab] = useState("main");
   const [approval, setApproval] = useState(null);
@@ -139,7 +152,7 @@ export default function App() {
     return null;
   },[]);
 
-  const handleRetailer=(r)=>{setRetailer(r);if(RETAILERS[r]){setShipMethod(RETAILERS[r].shipMethod);setOrderStatus(RETAILERS[r].status);}};
+  const handleRetailer=(r)=>{if(r!==retailer)resetAll();setRetailer(r);if(RETAILERS[r]){setShipMethod(RETAILERS[r].shipMethod);setOrderStatus(RETAILERS[r].status);setMemo(RETAILERS[r].defaultMemo||"");}};
 
   useEffect(() => {
     if (result && rows.length) initApproval(rows, retailer, shipMethod, memo, orderStatus);
@@ -206,7 +219,8 @@ export default function App() {
   };
 
   const resetAll = () => {
-    setPdfs([]); setResult(null); setRows([]); setErr(""); setBusy(false); setBusyMsg(""); setApproval(null); setApprovalOrderIdx(0); setMemo(""); setGnbDate(localISODate()); setGnbUpsAccount("8V4012"); setGnbFedexAccount("704499884");
+    const defaultMemo = RETAILERS[retailer]?.defaultMemo || "";
+    setPdfs([]); setResult(null); setRows([]); setErr(""); setBusy(false); setBusyMsg(""); setApproval(null); setApprovalOrderIdx(0); setMemo(defaultMemo); setGnbDate(localISODate()); setGnbUpsAccount("8V4012"); setGnbFedexAccount("704499884");
     if (pdfRef.current) pdfRef.current.value = "";
   };
 
@@ -258,7 +272,7 @@ export default function App() {
   const initApproval = useCallback((allRows, curRetailer, curShipMethod, curMemo, curOrderStatus) => {
     const hasMismatchRows = allRows.some(r => r._poHasMismatch);
     const isGnb = RETAILERS[curRetailer]?.type === "gnb";
-    if ((curOrderStatus !== "Pending Approval" && !hasMismatchRows && !isGnb) || !allRows.length) { setApproval(null); return; }
+    if ((curOrderStatus !== "Pending Approval" && !hasMismatchRows) || !allRows.length) { setApproval(null); return; }
     const rc = RETAILERS[curRetailer];
     // GNB: group all rows under the blanket PO #; others: group by Quill/individual PO #
     const orderMap = new Map();
@@ -328,26 +342,26 @@ export default function App() {
     const poNums = approval.orders.map(o => o.poNumber).join("_");
     const allLines = approval.orders.flatMap(o => o.lines);
     if (RETAILERS[retailer]?.type === "gnb") {
-      const headers = ["Line ID","Date","Quill PO #","Status","NS SKU","Quantity","Rate","Amount","Ship Date","Cancel Date","Must Arrive By Date","Ship To","Address 1","City","State","Zip","Ship Method","Freight Account #","SCAC"];
+      const headers = ["Date","Quill PO #","Status","NS SKU","Quantity","Rate","Amount","Ship Date","Cancel Date","Must Arrive By Date","Ship To","Address 1","City","State","Zip","Ship Method","Freight Account #","SCAC"];
       const data = [headers, ...allLines.map(l => [
-        l.lineId, l.date, l.orderNum, l.status, l.nsSku,
+        l.date, l.orderNum, l.status, l.nsSku,
         parseFloat(l.quantity)||0, parseFloat(l.rate)||0, parseFloat(l.amount)||0,
         l.shipDate, l.cancelDate, l.mabd,
         l.shipAddressee, l.shipAddr1, l.shipCity, l.shipState, l.shipZip,
         l.shipMethod, l.freightAccount, l.scac
       ])];
       const ws = XLSX.utils.aoa_to_sheet(data);
-      ws["!cols"] = [8,12,14,16,22,10,10,12,12,12,16,28,26,14,8,10,14,14,8].map(wch=>({wch}));
+      ws["!cols"] = [12,14,16,22,10,10,12,12,12,16,28,26,14,8,10,14,14,8].map(wch=>({wch}));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "GNB Order Review");
       XLSX.writeFile(wb, `GNB_PO${poNums}_Review.xlsx`);
       return;
     }
-    const headers = ["Line ID","Date","Order #","PO/Check Number","Status","Name","External ID","Description","Quantity","Item Rate","Amount","Ship Date","Cancel Date","Must Arrive By Date","Status","Shipping Addressee","Shipping Address 1","Shipping Address 2","Shipping City","Shipping State/Province","Shipping Zip"];
+    const headers = ["Date","Order #","PO/Check Number","Status","Name","External ID","Description","Quantity","Item Rate","Amount","Ship Date","Cancel Date","Must Arrive By Date","Status","Shipping Addressee","Shipping Address 1","Shipping Address 2","Shipping City","Shipping State/Province","Shipping Zip"];
     const data = [
       headers,
       ...allLines.map(l => [
-        l.lineId, l.date, l.orderNum, l.poNumber,
+        l.date, l.orderNum, l.poNumber,
         l.status, l.name, l.externalId, l.description,
         parseFloat(l.quantity)||0, parseFloat(l.rate)||0, parseFloat(l.amount)||0,
         l.shipDate, l.cancelDate, l.mabd, l.lineStatus,
@@ -355,7 +369,7 @@ export default function App() {
       ])
     ];
     const ws = XLSX.utils.aoa_to_sheet(data);
-    ws["!cols"] = [8,12,12,16,16,35,16,28,10,10,12,12,12,16,16,28,28,15,15,10,12].map(wch=>({wch}));
+    ws["!cols"] = [12,12,16,16,35,16,28,10,10,12,12,12,16,16,28,28,15,15,10,12].map(wch=>({wch}));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Approval");
     XLSX.writeFile(wb, `${poNums.replace(/[^a-zA-Z0-9_]/g,"_")}_Approval.xlsx`);
@@ -372,6 +386,8 @@ export default function App() {
     if (RETAILERS[retailer]?.type === "gnb") {
       const rc = RETAILERS[retailer];
       const gnbExtracted = [];
+
+      // Extract all uploaded PDFs
       for (let i = 0; i < queued.length; i++) {
         const pdfItem = queued[i];
         setBusyMsg(`Processing ${i+1} of ${queued.length}: ${pdfItem.name}`);
@@ -398,49 +414,82 @@ export default function App() {
         }
         setPdfs([...currentPdfs]);
       }
-      const poData = gnbExtracted.find(r => r.data?.docType === "po")?.data;
-      const distroData = gnbExtracted.find(r => r.data?.docType === "distro")?.data;
-      if (!poData || !distroData) {
-        setErr(!poData && !distroData ? "Upload both the GNB blanket PO and distro sheet." : !poData ? "Blanket PO not recognized — ensure both PDFs are uploaded." : "Distro sheet not recognized — ensure both PDFs are uploaded.");
+
+      const poItems = gnbExtracted.filter(r => r.data?.docType === "po");
+      const distroItems = gnbExtracted.filter(r => r.data?.docType === "distro");
+
+      if (!poItems.length || !distroItems.length) {
+        setErr(!poItems.length ? "No blanket PO recognized — ensure PO PDFs are included." : "No distro sheet recognized — ensure distro sheet PDFs are included.");
         setBusy(false); return;
       }
-      const poSkuNorm = String(poData.sku || "").trim().toUpperCase();
-      const distroItemNorm = String(distroData.itemNum || "").trim().toUpperCase();
-      const skuMismatch = poSkuNorm && distroItemNorm && poSkuNorm !== distroItemNorm ? { poSku: poData.sku, distroItemNum: distroData.itemNum } : null;
-      const itemMatch = im?.length ? lookup(im, null, poData.sku) : null;
-      const nsSku = itemMatch ? String(itemMatch["Name"] || "").trim() : poData.sku || "";
-      const externalId = itemMatch ? String(itemMatch["External ID"] || "").trim() : poData.sku || "";
-      const gnbUnmatched = itemMatch ? [] : (poData.sku ? [poData.sku] : []);
+
+      // Match each PO to a distro by GNB PO number; fall back to any unmatched distro
+      const usedDistroIds = new Set();
+      const pairs = poItems.map(po => {
+        const poNum = String(po.data?.poNumber || "").trim();
+        let match = distroItems.find(d => !usedDistroIds.has(d.id) && String(d.data?.gnbiPoNumber || "").trim() === poNum);
+        if (!match) match = distroItems.find(d => !usedDistroIds.has(d.id));
+        if (match) usedDistroIds.add(match.id);
+        return { poData: po.data, distroData: match?.data || null, distroId: match?.id || null };
+      });
+
+      const unpaired = pairs.filter(p => !p.distroData).map(p => p.poData?.poNumber || "unknown");
+      if (unpaired.length) {
+        setErr(`Could not match a distro sheet for PO${unpaired.length > 1 ? "s" : ""}: ${unpaired.join(", ")}. Ensure each PO has a matching distro sheet.`);
+        setBusy(false); return;
+      }
+
       const GNB_SHIP_MAP = {
         "Fed Ex Ground": { method: "Fedex Ground", account: gnbFedexAccount, scac: "FDEG" },
         "FedEx Ground":  { method: "Fedex Ground", account: gnbFedexAccount, scac: "FDEG" },
         "UPS Ground":    { method: "UPS Ground",   account: gnbUpsAccount,   scac: "UPSN" },
       };
       const todayDate = isoToMDY(gnbDate) || new Date().toLocaleDateString("en-US");
-      const allGnbRows = (distroData.locations || []).filter(loc => (Number(loc.quantity)||0) > 0).map(loc => {
-        const sm = GNB_SHIP_MAP[loc.shipMethod] || { method: shipMethod, account: "", scac: "" };
-        const shipDate = fmtDate(loc.shipDate || distroData.primaryShipDate || "");
-        const mabd = shipDate ? addDays(shipDate, 7) : "";
-        const qty = Number(loc.quantity) || 0;
-        const rate = Number(poData.unitCost) || 0;
-        return {
-          "Order #": loc.quillPoNum || "", "NS SKU": nsSku, "Customer Part Number": distroData.quillSkuNum || "",
-          "Date": todayDate, "Quantity": qty, "Rate": rate, "Amount": parseFloat((qty * rate).toFixed(2)),
-          "Is EDI Sent": rc.isEdiSent, "PO Number": loc.quillPoNum || "", "NS CUSTOMER": rc.nsCustomer,
-          "Price Level": rc.priceLevel, "Status": orderStatus,
-          "Ship Date": shipDate, "Cancel Date": shipDate, "Must Arrive By Date": mabd,
-          "Name": loc.name || "", "Attention": "", "Address 1": loc.address1 || "", "Address 2": loc.address2 || "",
-          "City": loc.city || "", "State": loc.state || "", "Zip": loc.zip || "", "Country": loc.country || "US",
-          "Ship Method": sm.method, "Freight Account #": sm.account, "SCAC": sm.scac,
-          "Memo": `Shipping instructions for Quill order: SHIP FREIGHT COLLECT (PO ${poData.poNumber})`,
-          "External ID": externalId, "_gnbSkuMismatch": !!skuMismatch, "_gnbPoNumber": String(poData.poNumber || ""),
-        };
-      });
-      const distroId = gnbExtracted.find(r => r.data?.docType === "distro")?.id;
-      if (distroId) currentPdfs = currentPdfs.map(p => p.id === distroId ? { ...p, rows: allGnbRows, unmatched: gnbUnmatched } : p);
+
+      let allGnbRows = [];
+      const gnbUnmatched = [];
+
+      for (const { poData, distroData, distroId } of pairs) {
+        const itemMatch = im?.length ? lookup(im, null, poData.sku) : null;
+        const nsSku = itemMatch ? String(itemMatch["Name"] || "").trim() : poData.sku || "";
+        const externalId = itemMatch ? String(itemMatch["External ID"] || "").trim() : poData.sku || "";
+        if (!itemMatch && poData.sku) gnbUnmatched.push(poData.sku);
+
+        const pairRows = (distroData.locations || []).filter(loc => (Number(loc.quantity)||0) > 0).map(loc => {
+          const sm = GNB_SHIP_MAP[loc.shipMethod] || { method: shipMethod, account: "", scac: "" };
+          const shipDate = fmtDate(loc.shipDate || distroData.primaryShipDate || "");
+          const mabd = shipDate ? addDays(shipDate, 7) : "";
+          const qty = Number(loc.quantity) || 0;
+          const rate = Number(poData.unitCost) || 0;
+          return {
+            "Order #": loc.quillPoNum || "", "NS SKU": nsSku, "Customer Part Number": distroData.quillSkuNum || "",
+            "Date": todayDate, "Quantity": qty, "Rate": rate, "Amount": parseFloat((qty * rate).toFixed(2)),
+            "Is EDI Sent": rc.isEdiSent, "PO Number": loc.quillPoNum || "", "NS CUSTOMER": rc.nsCustomer,
+            "Price Level": rc.priceLevel, "Status": orderStatus,
+            "Ship Date": shipDate, "Cancel Date": shipDate, "Must Arrive By Date": mabd,
+            "Name": loc.name || "", "Attention": "", "Address 1": loc.address1 || "", "Address 2": loc.address2 || "",
+            "City": loc.city || "", "State": loc.state || "", "Zip": loc.zip || "", "Country": loc.country || "US",
+            "Ship Method": sm.method, "Freight Account #": sm.account, "SCAC": sm.scac,
+            "Memo": `Shipping instructions for Quill order: SHIP FREIGHT COLLECT (PO ${poData.poNumber})`,
+            "External ID": externalId, "_gnbPoNumber": String(poData.poNumber || ""),
+          };
+        });
+
+        allGnbRows = allGnbRows.concat(pairRows);
+        if (distroId) currentPdfs = currentPdfs.map(p => p.id === distroId ? { ...p, rows: pairRows, unmatched: itemMatch ? [] : [poData.sku] } : p);
+      }
+
+      // SKU mismatch check only applies to single-pair uploads
+      const skuMismatch = pairs.length === 1 ? (() => {
+        const { poData, distroData } = pairs[0];
+        const poSku = String(poData?.sku || "").trim().toUpperCase();
+        const distroItem = String(distroData?.itemNum || "").trim().toUpperCase();
+        return poSku && distroItem && poSku !== distroItem ? { poSku: poData.sku, distroItemNum: distroData.itemNum } : null;
+      })() : null;
+
       setPdfs([...currentPdfs]);
       setRows(allGnbRows);
-      setResult({ totalPOs: 1, failedPOs: currentPdfs.filter(p => p.status === "error").length, allUnmatched: gnbUnmatched, allCaseMismatches: [], skuMismatch });
+      setResult({ totalPOs: pairs.length, failedPOs: currentPdfs.filter(p => p.status === "error").length, allUnmatched: gnbUnmatched, allCaseMismatches: [], skuMismatch });
       initApproval(allGnbRows, retailer, shipMethod, memo, orderStatus);
       setBusy(false); return;
     }
@@ -454,13 +503,15 @@ export default function App() {
       try {
         const rc = RETAILERS[retailer];
         const isHyVee = rc.orderUnit === "cases";
+        const isJungleJims = retailer === "Jungle Jims Market Inc";
+        const isImperial = retailer === "Imperial Distributors Inc.";
         const resp = await fetch("/api/anthropic/v1/messages", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             model: "claude-sonnet-4-6",
             max_tokens: 4096,
-            system: isHyVee ? HY_VEE_PROMPT : PROMPT,
+            system: isHyVee ? HY_VEE_PROMPT : isJungleJims ? JJ_PROMPT : isImperial ? IMPERIAL_PROMPT : PROMPT,
             messages: [{
               role: "user",
               content: [
@@ -480,10 +531,19 @@ export default function App() {
         const mabd = fmtDate(po.mustArriveByDate || po.deliveryDate || "");
         const shipDate = mabd ? subBizDays(mabd, 10) : "";
         const cancelDate = mabd ? subBizDays(mabd, 10) : "";
+
+        let jjShipDate = "", jjCancelDate = "", jjMabd = "", jjMemo = "";
+        if (isJungleJims) {
+          jjShipDate = po.orderDate ? addDays(fmtDate(po.orderDate), 1) : "";
+          jjCancelDate = jjShipDate;
+          jjMabd = jjShipDate ? addBizDays(jjShipDate, 5) : "";
+          jjMemo = [rc.defaultMemo, po.deliveryInstructions ? `Delivery Instructions: ${po.deliveryInstructions}` : ""].filter(Boolean).join(" ");
+        }
+
         let newRows = [], unmatched = [], caseMismatches = [];
 
         for (const line of po.lineItems) {
-          let nsSku = "", externalId = "", qty = 0, rate = 0, rowCaseMismatch = false;
+          let nsSku = "", externalId = "", qty = 0, rate = 0, rowCaseMismatch = false, rowDepartment = "", rowCustomerPartNum = "";
 
           if (isHyVee) {
             const upc11 = String(line.mfgNum || "").substring(0, 6) + String(line.prodNum || "").padStart(5, "0").substring(0, 5);
@@ -506,6 +566,42 @@ export default function App() {
               qty = Number(line.cases) || 0;
               rate = Number(line.netCostPerCase) || 0;
             }
+          } else if (isJungleJims) {
+            const upc11 = String(line.upc || "").replace(/\D/g, "").substring(0, 11);
+            const m = im?.length ? im.find(it => String(it["UPC Code"] || "").replace(/\D/g, "").substring(0, 11) === upc11) : null;
+            if (m) {
+              nsSku = String(m["Name"] || "").trim();
+              externalId = String(m["External ID"] || "").trim();
+            } else {
+              const label = upc11 || line.description || "";
+              unmatched.push(label);
+              nsSku = label;
+              externalId = "";
+            }
+            qty = Number(line.quantity) || 0;
+            rate = Number(line.unitPrice) || 0;
+            rowDepartment = String(line.department || "");
+          } else if (isImperial) {
+            const upc12 = String(line.gtin || "").replace(/\D/g, "").slice(-12);
+            const m = im?.length ? lookup(im, upc12, line.vendorSku) : null;
+            if (m) {
+              nsSku = String(m["Name"] || "").trim();
+              externalId = String(m["External ID"] || "").trim();
+              const cp = parseInt(m["Casepack Outer"]) || 1;
+              const pdfCsePck = parseInt(line.csePck) || 0;
+              rowCaseMismatch = pdfCsePck > 0 && pdfCsePck !== cp;
+              if (rowCaseMismatch) {
+                caseMismatches.push(`PO ${po.poNumber} - ${externalId}: PDF casepack=${pdfCsePck}, item master casepack=${cp}`);
+              }
+            } else {
+              const label = line.vendorSku || upc12 || line.description || "";
+              unmatched.push(label);
+              nsSku = line.vendorSku || "";
+              externalId = line.vendorSku || "";
+            }
+            qty = Number(line.quantity) || 0;
+            rate = Number(line.unitPrice) || 0;
+            rowCustomerPartNum = String(line.itemNum || "");
           } else {
             if (im?.length) {
               const m = lookup(im, line.upc, line.vendorItemNum);
@@ -527,6 +623,7 @@ export default function App() {
 
           const rowMemo = isHyVee
             ? `PODate ${po.orderDate} RequestedShipDate ${shipDate} CancelDate ${cancelDate} MustArriveBy ${mabd}`
+            : isJungleJims ? jjMemo
             : (memo || po.memo || "");
           const shipToName = po.shipToName || (isHyVee ? "HY-VEE, INC." : "");
           newRows.push({
@@ -534,11 +631,15 @@ export default function App() {
             "Quantity": qty, "Rate": rate, "Amount": parseFloat((qty * rate).toFixed(2)),
             "Is EDI Sent": rc.isEdiSent, "PO Number": po.poNumber, "NS CUSTOMER": rc.nsCustomer,
             "Price Level": rc.priceLevel, "Status": orderStatus,
-            "Ship Date": shipDate, "Cancel Date": cancelDate, "Must Arrive By Date": mabd,
+            "Ship Date": isJungleJims ? jjShipDate : shipDate,
+            "Cancel Date": isJungleJims ? jjCancelDate : cancelDate,
+            "Must Arrive By Date": isJungleJims ? jjMabd : mabd,
             "Name": shipToName, "Attention": po.shipToAttention || "",
             "Address 1": po.shipToAddress1, "Address 2": po.shipToAddress2 || "",
             "City": po.shipToCity, "State": po.shipToState, "Zip": po.shipToZip,
             "Country": po.shipToCountry, "Ship Method": shipMethod, "Memo": rowMemo,
+            "Customer Part Number": rowCustomerPartNum,
+            "Department": rowDepartment,
             "Description": line.description || "",
             "External ID": externalId,
             "_caseMismatch": rowCaseMismatch,
@@ -567,6 +668,8 @@ export default function App() {
   // Overlay current settings onto stored rows so changing dropdowns updates results instantly
   const rc = RETAILERS[retailer] || {};
   const isGnbRetailer = rc.type === "gnb";
+  const isJungleJimsRetailer = retailer === "Jungle Jims Market Inc";
+  const isImperialRetailer = retailer === "Imperial Distributors Inc.";
   const activeCols = isGnbRetailer ? GNB_APPROVAL_COLS : APPROVAL_COLS;
   const amountColIdx = activeCols.findIndex(c => c.key === "amount");
   const effectiveRows = rows.map(r => ({
@@ -584,8 +687,8 @@ export default function App() {
     "NS CUSTOMER": rc.nsCustomer,
     "Price Level": rc.priceLevel,
     "Is EDI Sent": rc.isEdiSent,
-    // GNB memo is auto-generated per row; don't override
-    ...(!isGnbRetailer && memo ? { "Memo": memo } : {}),
+    // GNB and JJ memos are auto-generated per row; don't override
+    ...(!isGnbRetailer && !isJungleJimsRetailer && memo ? { "Memo": memo } : {}),
   }));
   const total = effectiveRows.reduce((s, r) => s + Number(r["Amount"]), 0);
   const queuedCount = pdfs.filter(p => p.status === "queued").length;
@@ -618,7 +721,7 @@ export default function App() {
             <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Retailer</label>
             <select style={{...S.select,padding:"7px 10px",fontSize:13}} value={retailer} onChange={e=>handleRetailer(e.target.value)} disabled={busy}>
               <option value="" disabled>Select Retailer</option>
-              {Object.keys(RETAILERS).map(r=><option key={r}>{r}</option>)}
+              {Object.entries(RETAILERS).filter(([,rc])=>import.meta.env.DEV||!rc.dev).map(([r])=><option key={r}>{r}</option>)}
             </select>
           </div>
           <div>
@@ -806,26 +909,26 @@ export default function App() {
                 <span style={{fontSize:13,color:"var(--color-text-secondary)",marginLeft:4}}>PO {curOrder.poNumber} · {curOrder.lines.length} line{curOrder.lines.length!==1?"s":""}</span>
               </div>
             )}
-            <div style={{overflowX:"auto",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8,marginBottom:8}}>
+            <div style={{overflowX:"auto",overflowY:"auto",maxHeight:460,border:"0.5px solid var(--color-border-tertiary)",borderRadius:8,marginBottom:8}}>
               <table style={{borderCollapse:"collapse",tableLayout:"fixed",minWidth:activeCols.reduce((s,c)=>s+c.w,0)}}>
                 <thead>
                   <tr style={{background:"#BEBEBE"}}>
-                    {activeCols.map(col=>(
-                      <th key={col.key} style={{...S.th,width:col.w,minWidth:col.w}}>{col.label}</th>
+                    {activeCols.map((col,ci)=>(
+                      <th key={col.key} style={{...S.th,width:col.w,minWidth:col.w,position:"sticky",top:0,background:"#BEBEBE",zIndex:ci===0?3:2,...(ci===0?{left:0}:{})}}>{col.label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {curOrder.lines.map((line,li)=>(
                     <tr key={li}>
-                      {activeCols.map(col=>(
-                        <td key={col.key} style={{...S.td,borderBottom:li<curOrder.lines.length-1?"0.5px solid var(--color-border-tertiary)":"none",padding:"3px 4px"}}>
+                      {activeCols.map((col,ci)=>(
+                        <td key={col.key} style={{...S.td,borderBottom:li<curOrder.lines.length-1?"0.5px solid var(--color-border-tertiary)":"none",padding:"3px 4px",...(ci===0?{position:"sticky",left:0,background:"var(--color-background-primary)",zIndex:1}:{})}}>
                           <input
                             style={{width:"100%",boxSizing:"border-box",padding:"4px 6px",fontSize:12,fontFamily:"var(--font-sans)",border:"1px solid transparent",borderRadius:4,background:"transparent",color:line.caseMismatch?"#ef4444":"var(--color-text-primary)",outline:"none"}}
                             value={String(isGnbRetailer&&col.key==="date"?(isoToMDY(gnbDate)||line[col.key]):(line[col.key]??""))}
-                            readOnly={isGnbRetailer&&col.key==="date"}
+                            readOnly={ci===0||(isGnbRetailer&&col.key==="date")}
                             onChange={e=>updateApprovalLine(approvalOrderIdx,li,col.key,e.target.value)}
-                            onFocus={e=>{if(!(isGnbRetailer&&col.key==="date"))e.target.style.borderColor="var(--color-border-info)";}}
+                            onFocus={e=>{if(ci!==0&&!(isGnbRetailer&&col.key==="date"))e.target.style.borderColor="var(--color-border-info)";}}
                             onBlur={e=>e.target.style.borderColor="transparent"}
                           />
                         </td>
@@ -852,30 +955,49 @@ export default function App() {
               <button key={t.label} style={S.previewTabBtn(previewTab===t.label)} onClick={()=>setPreviewTab(t.label)}>{t.label}</button>
             ))}
           </div>
-          <div style={{overflowX:"auto",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
+          {(()=>{
+            const _hideCols=new Set(rc.hideCols||[]);
+            const _extraCols=(rc.showCols||{})[previewTab]||[];
+            const previewCols=[...(TABS_PREVIEW.find(t=>t.label===previewTab)?.cols||[]),..._extraCols].filter(h=>!_hideCols.has(h));
+            return (
+          <div style={{overflowX:"auto",overflowY:"auto",maxHeight:460,border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <thead>
                 <tr style={{background:"#BEBEBE"}}>
-                  {TABS_PREVIEW.find(t=>t.label===previewTab)?.cols.map(h=><th key={h} style={S.th}>{h}</th>)}
+                  <th style={{...S.th,width:40,minWidth:40,position:"sticky",top:0,left:0,background:"#BEBEBE",zIndex:3}}>#</th>
+                  {previewCols.map(h=>(
+                    <th key={h} style={{...S.th,position:"sticky",top:0,background:"#BEBEBE",zIndex:2}}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {effectiveRows.map((row,i)=>(
-                  <tr key={i}>
-                    {TABS_PREVIEW.find(t=>t.label===previewTab)?.cols.map(h=>(
-                      <td key={h} style={{...S.td,borderBottom:i<effectiveRows.length-1?"0.5px solid var(--color-border-tertiary)":"none",color:row._caseMismatch?"#ef4444":undefined}}>{row[h]}</td>
-                    ))}
-                  </tr>
-                ))}
+                {(()=>{
+                  const lineCounters={};
+                  return effectiveRows.map((row,i)=>{
+                    const poKey=isGnbRetailer?(row._gnbPoNumber||"default"):"default";
+                    lineCounters[poKey]=(lineCounters[poKey]||0)+1;
+                    const lineId=lineCounters[poKey];
+                    return (
+                      <tr key={i}>
+                        <td style={{...S.td,borderBottom:i<effectiveRows.length-1?"0.5px solid var(--color-border-tertiary)":"none",position:"sticky",left:0,background:"var(--color-background-primary)",zIndex:1,textAlign:"center",color:"var(--color-text-tertiary)",fontSize:11,width:40,minWidth:40}}>{lineId}</td>
+                        {previewCols.map(h=>(
+                          <td key={h} style={{...S.td,borderBottom:i<effectiveRows.length-1?"0.5px solid var(--color-border-tertiary)":"none",color:row._caseMismatch?"#ef4444":undefined}}>{row[h]}</td>
+                        ))}
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>
+            );
+          })()}
         </div>
 
         <div style={{display:"flex",gap:10,justifyContent:"space-between"}}>
           <button style={S.btnOutline} onClick={resetAll}><i className="ti ti-refresh" aria-hidden="true" style={{fontSize:15}}/>New batch</button>
-          <button style={S.btnSuccess} onClick={()=>dlCSV(isGnbRetailer?buildGnbCSV(effectiveRows):buildCSV(effectiveRows),`NS_${retailer.replace(/\s+/g,"_")}_${result.totalPOs}PO${result.totalPOs!==1?"s":""}.csv`)}><i className="ti ti-download" aria-hidden="true" style={{fontSize:15}}/>Download CSV</button>
-          <a href={isGnbRetailer?"https://4848284.app.netsuite.com/app/setup/assistants/nsimport/importassistant.nl?recid=214&new=T":"https://4848284.app.netsuite.com/app/setup/assistants/nsimport/importassistant.nl?recid=206&new=T"} target="_blank" rel="noreferrer" style={{...S.btnOutline,textDecoration:"none"}}><i className="ti ti-upload" aria-hidden="true" style={{fontSize:15}}/>Import CSV into NS</a>
+          <button style={S.btnSuccess} onClick={()=>dlCSV(isGnbRetailer?buildGnbCSV(effectiveRows):isJungleJimsRetailer?buildJjCSV(effectiveRows):isImperialRetailer?buildImperialCSV(effectiveRows):buildCSV(effectiveRows),`NS_${retailer.replace(/\s+/g,"_")}_${result.totalPOs}PO${result.totalPOs!==1?"s":""}.csv`)}><i className="ti ti-download" aria-hidden="true" style={{fontSize:15}}/>Download CSV</button>
+          <a href="https://4848284.app.netsuite.com/app/setup/assistants/nsimport/importassistant.nl?recid=206&new=T" target="_blank" rel="noreferrer" style={{...S.btnOutline,textDecoration:"none"}}><i className="ti ti-upload" aria-hidden="true" style={{fontSize:15}}/>Import CSV into NS</a>
         </div>
       </>)}
       </>}
