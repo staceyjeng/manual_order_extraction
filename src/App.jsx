@@ -6,18 +6,19 @@ const RETAILERS = {
   "BJ's Wholesale Club": { nsCustomer: "BJs Wholesale Corporate : BJs Wholesale", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No" },
   "Cost Plus World Market": { nsCustomer: "Cost Plus World Market", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
   "Gilt": { nsCustomer: "Gilt", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
-  "Global New Beginnings": { nsCustomer: "Global New Beginnings Inc.", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", type: "gnb" },
+  "Global New Beginnings": { nsCustomer: "Global New Beginnings Inc.", shipMethod: "Collect", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", type: "gnb" },
   "Hy-Vee": { nsCustomer: "Hy-Vee", shipMethod: "ROUTEPPD", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", orderUnit: "cases" },
   "Imperial Distributors Inc.": { nsCustomer: "Imperial Distributors Inc.", shipMethod: "ROUTEPPD", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", defaultMemo: "Frgt Terms :$1000 Prepaid", hideCols: ["Freight Account #","SCAC"] },
   "Jungle Jims Market Inc": { nsCustomer: "Jungle Jims Market Inc", shipMethod: "UPS Ground", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", defaultMemo: "Packing slip or invoice must be on the outside of the package, with the department specified. Jungle Jim's does not accept shipments from UPS freight. UPS Ground is Fine.", hideCols: ["Customer Part Number","Freight Account #","SCAC"], showCols: {"Items": ["Department"]} },
   "Mark-It Smart Inc.": { nsCustomer: "Mark-It Smart Inc.", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
+  "Samples": { nsCustomer: "Samples", shipMethod: "DPP", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "Yes" },
   "Sur La Table": { nsCustomer: "Sur La Table", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
   "TJ Maxx Canada": { nsCustomer: "TJ Maxx Canada", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
   "Verdi Commerce LLC": { nsCustomer: "Verdi Commerce LLC", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
 };
 const SHIP_METHODS = ["Collect","DPP","FedEx 2Day","FedEx Ground","FedEx Home Delivery","FedEx International Econ","FedEx SmartPost","Fedex Standard Overnight","Route","ROUTEPPD","UPS 2-Day","UPS 3-Day","UPS Express Saver","UPS Ground","UPS Overnight","UPS Surepost","USPS","USPS Ground Advantage"];
 const STATUSES = ["Pending Fulfillment","Pending Approval"];
-const CSV_HEADERS = ["Order #","NS SKU","Date","Quantity","Rate","Amount","Is EDI Sent","PO Number","NS CUSTOMER","Price Level","Status","Ship Date","Cancel Date","Must Arrive By Date","Name","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo"];
+const CSV_HEADERS = ["Order #","NS SKU","Date","Quantity","Rate","Amount","Is EDI Sent","Is Sample","PO Number","NS CUSTOMER","Price Level","Status","Ship Date","Cancel Date","Must Arrive By Date","Name","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo"];
 const IM_KEY = "item-master-data";
 const TABS_PREVIEW = [
   { label: "Header", cols: ["Order #","Date","Is EDI Sent","PO Number","NS CUSTOMER","Price Level","Status","Ship Date","Cancel Date","Must Arrive By Date","Name","Address 1","Address 2","City","State","Zip","Country","Ship Method","Freight Account #","SCAC","Memo"] },
@@ -50,7 +51,9 @@ const IMPERIAL_PROMPT=`Extract data from this Imperial Distributors purchase ord
 
 const JJ_PROMPT=`Extract data from this Jungle Jim's purchase order PDF. Return ONLY valid JSON, no markdown, no explanation.\n\n{"poNumber":"","orderDate":"MM/DD/YYYY","shipToName":"","shipToAddress1":"","shipToAddress2":"","shipToCity":"","shipToState":"2-letter","shipToZip":"","shipToCountry":"2-letter","deliveryInstructions":"","lineItems":[{"upc":"11 digits","department":"","quantity":0,"unitPrice":0,"description":""}]}\n\nRules: poNumber=Purchase Order number. orderDate=Order Date in MM/DD/YYYY. shipToName=ship-to company name (e.g. JUNGLE JIMS EASTGATE). deliveryInstructions=text after "Delivery Instructions:" label on the PO; empty string if none. lineItems: extract ALL lines. upc=first 11 digits of the UPC column only. department=Dpt column value (e.g. 63). quantity=Unit/Lbs column (total units, NOT cases). unitPrice=Cost/Un column. ONLY JSON.`;
 
-const GNB_PROMPT=`This is a Global New Beginnings (GNBI) document. Identify its type and extract accordingly. Return ONLY valid JSON, no markdown, no explanation.\n\nIf this is a PURCHASE ORDER (has "PURCHASE ORDER" heading, a PO # field, and SKU line items with unit cost):\n{"docType":"po","poNumber":"number only e.g. 3320","orderDate":"MM/DD/YYYY","shipDate":"MM/DD/YYYY","sku":"exact SKU string e.g. RSMS150GBRR24","unitCost":0.0000}\n\nIf this is a DISTRIBUTION SHEET (table of fulfillment center rows with a Quill P.O. # column and ship-to addresses):\n{"docType":"distro","gnbiPoNumber":"","itemNum":"Item # value e.g. RSMS150GBRR24","quillSkuNum":"Quill SKU # value e.g. 3171196","primaryShipDate":"MM/DD/YYYY","locations":[{"quillPoNum":"e.g. XSYI66-1","name":"full center name e.g. Quill Fulfillment Center #472","address1":"street address line 1","address2":"street address line 2 if present else empty","city":"","state":"2-letter","zip":"","country":"US","quantity":0,"shipMethod":"Fed Ex Ground or UPS Ground","shipDate":"MM/DD/YYYY"}]}\n\nDistro rules: exclude rows where quantity=0. shipMethod must be exactly "Fed Ex Ground" or "UPS Ground" as shown. shipDate=the "Latest Acceptable Ship Date" for that row; if blank use primaryShipDate. ONLY JSON.`;
+const SAMPLES_PROMPT=`Parse this sample request message from an employee. It may contain one or more separate orders (each going to a distinct shipping address). Return ONLY valid JSON, no markdown, no explanation.\n\n{"orders":[{"lineItems":[{"sku":"exact SKU string as written","quantity":0}],"shipToName":"","shipToAttention":"","shipToAddress1":"","shipToAddress2":"","shipToCity":"","shipToState":"2-letter","shipToZip":"","shipToCountry":"2-letter","memo":""}]}\n\nRules:\n- Each distinct shipping address = one order object.\n- sku = the product code exactly as written (e.g. DMW10008, DCAF26CMGBCM02). Strip product descriptions; keep only the code.\n- quantity = integer. "1x of each" or "1x" before a list = 1 for every item. Parse the number before "x" as the quantity.\n- shipToAttention = name from "Attn:", "ATTN:", or similar label; empty string if none.\n- shipToAddress2 = suite, floor, door, unit, building — any secondary address line; empty string if none.\n- shipToCountry = 2-letter ISO: "US" for USA, "CA" for Canada.\n- memo = any extra delivery notes (door numbers, division, line review, room numbers, deal numbers, etc.) not captured in other fields; empty string if none.\n- ONLY JSON.`;
+
+const GNB_PROMPT=`This is a Global New Beginnings (GNBI) document. Identify its type and extract accordingly. Return ONLY valid JSON, no markdown, no explanation.\n\nIf this is a PURCHASE ORDER (has "PURCHASE ORDER" heading, a PO # field, and SKU line items with unit cost):\n{"docType":"po","poNumber":"number only e.g. 3320","orderDate":"MM/DD/YYYY","shipDate":"MM/DD/YYYY","sku":"exact SKU string e.g. RSMS150GBRR24","unitCost":0.0000}\n\nIf this is a DISTRIBUTION SHEET (table of fulfillment center rows with a Quill P.O. # column and ship-to addresses):\n{"docType":"distro","gnbiPoNumber":"","itemNum":"Item # value e.g. RSMS150GBRR24","quillSkuNum":"Quill SKU # value e.g. 3171196","primaryShipDate":"MM/DD/YYYY","locations":[{"quillPoNum":"e.g. XSYI66-1","name":"full center name e.g. Quill Fulfillment Center #472","address1":"street address line 1","address2":"street address line 2 if present else empty","city":"","state":"2-letter","zip":"","country":"US","quantity":0,"shipMethod":"exact carrier name as shown on the sheet e.g. Fed Ex Ground, UPS Ground, T-Force, Roadrunner","scac":"SCAC code(s) exactly as shown e.g. RDFS or UPGF/TFIN; empty string if not shown","shipDate":"MM/DD/YYYY"}]}\n\nDistro rules: exclude rows where quantity=0. shipMethod=the exact carrier name from the sheet — do NOT normalize or replace unknown carriers with Fed Ex Ground or UPS Ground. scac=the raw SCAC string as printed (may contain slashes for multiple codes); empty string if absent. shipDate=the "Latest Acceptable Ship Date" for that row; if blank use primaryShipDate. ONLY JSON.`;
 
 const S = {
   card:{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"1.4rem 1.5rem",marginBottom:"1.1rem"},
@@ -82,6 +85,8 @@ export default function App() {
   const [shipMethod, setShipMethod] = useState("Route");
   const [orderStatus, setOrderStatus] = useState("Pending Fulfillment");
   const [memo, setMemo] = useState("");
+  const [samplesSubcustomer, setSamplesSubcustomer] = useState("");
+  const [samplesText, setSamplesText] = useState("");
   const [gnbDate, setGnbDate] = useState(localISODate);
   const [gnbUpsAccount, setGnbUpsAccount] = useState("8V4012");
   const [gnbFedexAccount, setGnbFedexAccount] = useState("704499884");
@@ -152,7 +157,7 @@ export default function App() {
     return null;
   },[]);
 
-  const handleRetailer=(r)=>{if(r!==retailer)resetAll();setRetailer(r);if(RETAILERS[r]){setShipMethod(RETAILERS[r].shipMethod);setOrderStatus(RETAILERS[r].status);setMemo(RETAILERS[r].defaultMemo||"");}};
+  const handleRetailer=(r)=>{if(r!==retailer){resetAll();setSamplesSubcustomer("");}setRetailer(r);if(RETAILERS[r]){setShipMethod(RETAILERS[r].shipMethod);setOrderStatus(RETAILERS[r].status);setMemo(RETAILERS[r].defaultMemo||"");}};
 
   useEffect(() => {
     if (result && rows.length) initApproval(rows, retailer, shipMethod, memo, orderStatus);
@@ -220,7 +225,7 @@ export default function App() {
 
   const resetAll = () => {
     const defaultMemo = RETAILERS[retailer]?.defaultMemo || "";
-    setPdfs([]); setResult(null); setRows([]); setErr(""); setBusy(false); setBusyMsg(""); setApproval(null); setApprovalOrderIdx(0); setMemo(defaultMemo); setGnbDate(localISODate()); setGnbUpsAccount("8V4012"); setGnbFedexAccount("704499884");
+    setPdfs([]); setResult(null); setRows([]); setErr(""); setBusy(false); setBusyMsg(""); setApproval(null); setApprovalOrderIdx(0); setMemo(defaultMemo); setGnbDate(localISODate()); setGnbUpsAccount("8V4012"); setGnbFedexAccount("704499884"); setSamplesSubcustomer(""); setSamplesText("");
     if (pdfRef.current) pdfRef.current.value = "";
   };
 
@@ -376,9 +381,65 @@ export default function App() {
   };
 
   const process = async () => {
-    const queued = pdfs.filter(p => p.status === "queued" && p.base64);
-    if (!queued.length) { setErr("No PDFs ready to process."); return; }
     setErr(""); setBusy(true);
+
+    if (retailer === "Samples") {
+      if (!samplesText.trim()) { setErr("Paste a sample request first."); setBusy(false); return; }
+      if (!samplesSubcustomer) { setErr("Select a subcustomer first."); setBusy(false); return; }
+      setBusyMsg("Parsing sample request…");
+      try {
+        const resp = await fetch("/api/anthropic/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-6", max_tokens: 4096, system: SAMPLES_PROMPT,
+            messages: [{ role: "user", content: samplesText.trim() }]
+          })
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.error) throw new Error(data.error?.message || `API error ${resp.status}`);
+        const raw = data.content?.find(b => b.type === "text")?.text || "";
+        const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+        const orders = parsed.orders || [];
+        const rc = RETAILERS[retailer];
+        const samplesRows = [];
+        const allUnmatched = [];
+        orders.forEach(order => {
+          (order.lineItems || []).forEach(line => {
+            const m = im?.length ? lookup(im, null, line.sku) : null;
+            const nsSku = m ? String(m["Name"] || "").trim() : line.sku || "";
+            const externalId = m ? String(m["External ID"] || "").trim() : line.sku || "";
+            if (!m && line.sku) allUnmatched.push(line.sku);
+            samplesRows.push({
+              "Order #": "", "NS SKU": nsSku,
+              "Date": isoToMDY(localISODate()),
+              "Quantity": Number(line.quantity) || 1, "Rate": 0, "Amount": 0,
+              "Is EDI Sent": rc.isEdiSent, "Is Sample": rc.isSample,
+              "PO Number": "",
+              "NS CUSTOMER": `Samples : Samples - ${samplesSubcustomer}`,
+              "Price Level": rc.priceLevel, "Status": orderStatus,
+              "Ship Date": "", "Cancel Date": "", "Must Arrive By Date": "",
+              "Name": order.shipToName || "", "Attention": order.shipToAttention || "",
+              "Address 1": order.shipToAddress1 || "", "Address 2": order.shipToAddress2 || "",
+              "City": order.shipToCity || "", "State": order.shipToState || "",
+              "Zip": order.shipToZip || "", "Country": order.shipToCountry || "US",
+              "Ship Method": shipMethod, "Memo": order.memo || memo || "",
+              "External ID": externalId,
+            });
+          });
+        });
+        setRows(samplesRows);
+        setResult({ totalPOs: orders.length, failedPOs: 0, allUnmatched, allCaseMismatches: [] });
+        initApproval(samplesRows, retailer, shipMethod, memo, orderStatus);
+      } catch(e) {
+        setErr(`Failed to parse request: ${e.message}`);
+      }
+      setBusy(false);
+      return;
+    }
+
+    const queued = pdfs.filter(p => p.status === "queued" && p.base64);
+    if (!queued.length) { setErr("No PDFs ready to process."); setBusy(false); return; }
 
     // Track changes locally to avoid stale-closure issues across async iterations
     let currentPdfs = [...pdfs];
@@ -456,11 +517,20 @@ export default function App() {
         if (!itemMatch && poData.sku) gnbUnmatched.push(poData.sku);
 
         const pairRows = (distroData.locations || []).filter(loc => (Number(loc.quantity)||0) > 0).map(loc => {
-          const sm = GNB_SHIP_MAP[loc.shipMethod] || { method: shipMethod, account: "", scac: "" };
+          const sm = GNB_SHIP_MAP[loc.shipMethod];
           const shipDate = fmtDate(loc.shipDate || distroData.primaryShipDate || "");
           const mabd = shipDate ? addDays(shipDate, 7) : "";
           const qty = Number(loc.quantity) || 0;
           const rate = Number(poData.unitCost) || 0;
+          let resolvedMethod, resolvedAccount, resolvedScac, ltlNote = "";
+          if (sm) {
+            resolvedMethod = sm.method; resolvedAccount = sm.account; resolvedScac = sm.scac;
+          } else {
+            resolvedMethod = "Collect"; resolvedAccount = "";
+            const rawScac = String(loc.scac || "").trim();
+            resolvedScac = rawScac && !rawScac.includes("/") ? rawScac : "";
+            if (loc.shipMethod) ltlNote = ` | Ship LTL with ${loc.shipMethod}${rawScac ? ` - ${rawScac}` : ""}`;
+          }
           return {
             "Order #": loc.quillPoNum || "", "NS SKU": nsSku, "Customer Part Number": distroData.quillSkuNum || "",
             "Date": todayDate, "Quantity": qty, "Rate": rate, "Amount": parseFloat((qty * rate).toFixed(2)),
@@ -469,8 +539,8 @@ export default function App() {
             "Ship Date": shipDate, "Cancel Date": shipDate, "Must Arrive By Date": mabd,
             "Name": loc.name || "", "Attention": "", "Address 1": loc.address1 || "", "Address 2": loc.address2 || "",
             "City": loc.city || "", "State": loc.state || "", "Zip": loc.zip || "", "Country": loc.country || "US",
-            "Ship Method": sm.method, "Freight Account #": sm.account, "SCAC": sm.scac,
-            "Memo": `Shipping instructions for Quill order: SHIP FREIGHT COLLECT (PO ${poData.poNumber})`,
+            "Ship Method": resolvedMethod, "Freight Account #": resolvedAccount, "SCAC": resolvedScac,
+            "Memo": `Shipping instructions for Quill order: SHIP FREIGHT COLLECT (PO ${poData.poNumber})${ltlNote}`,
             "External ID": externalId, "_gnbPoNumber": String(poData.poNumber || ""),
           };
         });
@@ -684,9 +754,11 @@ export default function App() {
         r["Ship Method"] === "UPS Ground"   ? gnbUpsAccount   : "",
     } : {}),
     "Status": r._poHasMismatch ? "Pending Approval" : orderStatus,
-    "NS CUSTOMER": rc.nsCustomer,
+    "NS CUSTOMER": retailer === "Samples" && samplesSubcustomer ? `Samples : Samples - ${samplesSubcustomer}` : rc.nsCustomer,
     "Price Level": rc.priceLevel,
     "Is EDI Sent": rc.isEdiSent,
+    "Is Sample": rc.isSample,
+    ...(retailer === "Samples" ? { "Rate": 0, "Amount": 0 } : {}),
     // GNB and JJ memos are auto-generated per row; don't override
     ...(!isGnbRetailer && !isJungleJimsRetailer && memo ? { "Memo": memo } : {}),
   }));
@@ -716,7 +788,7 @@ export default function App() {
 
       {/* Order Settings */}
       {settingsTab==="main"&&<div style={{...S.card,padding:"0.75rem 1rem",marginBottom:"0.75rem"}}>
-        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:8,marginBottom:8}}>
+        <div style={{display:"grid",gridTemplateColumns:retailer==="Samples"?"1fr 1fr 1fr 1fr":"2fr 1fr 1fr",gap:8,marginBottom:8}}>
           <div>
             <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Retailer</label>
             <select style={{...S.select,padding:"7px 10px",fontSize:13}} value={retailer} onChange={e=>handleRetailer(e.target.value)} disabled={busy}>
@@ -724,6 +796,19 @@ export default function App() {
               {Object.entries(RETAILERS).filter(([,rc])=>import.meta.env.DEV||!rc.dev).map(([r])=><option key={r}>{r}</option>)}
             </select>
           </div>
+          {retailer==="Samples"&&(
+            <div>
+              <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Subcustomer</label>
+              <select style={{...S.select,padding:"7px 10px",fontSize:13}} value={samplesSubcustomer} onChange={e=>setSamplesSubcustomer(e.target.value)} disabled={busy}>
+                <option value="" disabled>Select One</option>
+                <option>Charitable Contributions</option>
+                <option>Customer Service</option>
+                <option>General</option>
+                <option>PR</option>
+                <option>Retailers</option>
+              </select>
+            </div>
+          )}
           <div>
             <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Ship method</label>
             <select style={{...S.select,padding:"7px 10px",fontSize:13}} value={shipMethod} onChange={e=>setShipMethod(e.target.value)} disabled={busy}>
@@ -790,8 +875,20 @@ export default function App() {
         <input ref={imRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>loadIMCSV(e.target.files[0])}/>
       </div>}
 
+      {/* Samples text card */}
+      {settingsTab==="main"&&retailer==="Samples"&&<div style={S.card}>
+        <span style={S.sectionLabel}><i className="ti ti-message-2" aria-hidden="true" style={{marginRight:6,fontSize:12,verticalAlign:"-1px"}}/>Sample request</span>
+        <textarea
+          style={{...S.input,padding:"9px 12px",fontSize:13,minHeight:150,resize:"vertical",lineHeight:1.55,display:"block"}}
+          placeholder={"Paste the Slack request here…\n\n1x DMW10008\nRaine Page\n316 Robinhood Road\nBrentwood, TN 37027"}
+          value={samplesText}
+          onChange={e=>setSamplesText(e.target.value)}
+          disabled={busy}
+        />
+      </div>}
+
       {/* PDF card */}
-      {settingsTab==="main"&&<div
+      {settingsTab==="main"&&retailer!=="Samples"&&<div
         style={hasPdfs?{...S.card,padding:"0.75rem 1rem",marginBottom:"0.75rem",transition:"border-color 0.15s,background 0.15s",...(pdfDrag?{borderColor:"var(--color-border-info)",background:"var(--color-background-info)"}:{})}:S.card}
         onDragOver={hasPdfs?e=>{e.preventDefault();setPdfDrag(true);}:undefined}
         onDragLeave={hasPdfs?()=>setPdfDrag(false):undefined}
@@ -867,11 +964,15 @@ export default function App() {
       {settingsTab==="main"&&<>
       {err&&<div style={S.msgErr}><i className="ti ti-alert-circle" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/>{err}</div>}
 
-      {(busy||queuedCount>0)&&(
-        <button style={busy||!queuedCount?S.btnPrimaryDis:S.btnPrimary} onClick={process} disabled={busy||!queuedCount}>
+      {(busy||(retailer==="Samples"?!!samplesText.trim():queuedCount>0))&&(
+        <button
+          style={(retailer==="Samples"?(busy||!samplesText.trim()||!samplesSubcustomer):(busy||!queuedCount))?S.btnPrimaryDis:S.btnPrimary}
+          onClick={process}
+          disabled={retailer==="Samples"?(busy||!samplesText.trim()||!samplesSubcustomer):(busy||!queuedCount)}
+        >
           {busy
             ?<><span style={{width:14,height:14,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"#fff",borderRadius:"50%",display:"inline-block",animation:"spin 0.7s linear infinite"}}/>{busyMsg}</>
-            :<><i className="ti ti-wand" aria-hidden="true" style={{fontSize:16}}/>{queuedCount===1?"Extract & generate CSV":`Extract ${queuedCount} PDFs & generate CSV`}</>}
+            :<><i className="ti ti-wand" aria-hidden="true" style={{fontSize:16}}/>{retailer==="Samples"?"Parse & generate CSV":queuedCount===1?"Extract & generate CSV":`Extract ${queuedCount} PDFs & generate CSV`}</>}
         </button>
       )}
 
