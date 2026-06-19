@@ -4,7 +4,7 @@ import JSZip from "jszip";
 
 const RETAILERS = {
   "BJ's Wholesale Club": { nsCustomer: "BJs Wholesale Corporate : BJs Wholesale", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No" },
-  "Global New Beginnings": { nsCustomer: "Global New Beginnings", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No" },
+  "Global New Beginnings": { nsCustomer: "Global New Beginnings Inc.", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", type: "gnb" },
   "Hy-Vee": { nsCustomer: "Hy-Vee", shipMethod: "ROUTEPPD", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", orderUnit: "cases" },
   "TJ Maxx Canada": { nsCustomer: "TJ Maxx Canada", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No" },
 };
@@ -14,24 +14,30 @@ const CSV_HEADERS = ["Order #","NS SKU","Date","Quantity","Rate","Amount","Is ED
 const IM_KEY = "item-master-data";
 const TABS_PREVIEW = [
   { label: "Order", cols: ["Order #","Date","PO Number","Status","Price Level","Is EDI Sent"] },
-  { label: "Items", cols: ["NS SKU","Quantity","Rate","Amount"] },
+  { label: "Items", cols: ["NS SKU","Customer Part Number","Quantity","Rate","Amount"] },
   { label: "Dates", cols: ["Ship Date","Cancel Date","Must Arrive By Date"] },
   { label: "Ship to", cols: ["Name","Address 1","Address 2","City","State","Zip","Country"] },
-  { label: "Settings", cols: ["NS CUSTOMER","Ship Method","Memo"] },
+  { label: "Settings", cols: ["NS CUSTOMER","Ship Method","Freight Account #","SCAC","Memo"] },
 ];
 
 function parseCsvRow(line){const vals=[];let cur="",inQ=false;for(let i=0;i<line.length;i++){const ch=line[i];if(inQ){if(ch==='"'&&line[i+1]==='"'){cur+='"';i++;}else if(ch==='"'){inQ=false;}else{cur+=ch;}}else{if(ch==='"'){inQ=true;}else if(ch===','){vals.push(cur);cur="";}else{cur+=ch;}}}vals.push(cur);return vals;}
 function parseImCsv(text){const lines=text.replace(/\r/g,"").trim().split("\n");if(!lines.length)return[];const hdrs=parseCsvRow(lines[0]).map(h=>h.trim());return lines.slice(1).filter(l=>l.trim()).map(line=>{const vals=parseCsvRow(line);const obj={};hdrs.forEach((h,i)=>{obj[h]=(vals[i]||"").trim();});return obj;});}
 function esc(v){if(v===null||v===undefined)return "";const s=String(v);return(s.includes(",")||s.includes('"')||s.includes("\n"))?'"'+s.replace(/"/g,'""')+'"':s;}
 function buildCSV(rows){return[CSV_HEADERS.join(","),...rows.map(r=>CSV_HEADERS.map(h=>esc(r[h])).join(","))].join("\n");}
+const GNB_CSV_HEADERS=["Order #","NS SKU","Customer Part Number","Date","Quantity","Rate","Amount","Is EDI Sent","PO Number","NS CUSTOMER","Price Level","Status","Ship Date","Cancel Date","Must Arrive By Date","Name","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Freight Account #","SCAC","Memo"];
+function buildGnbCSV(rows){return[GNB_CSV_HEADERS.join(","),...rows.map(r=>GNB_CSV_HEADERS.map(h=>esc(r[h])).join(","))].join("\n");}
 function fmtDate(d){if(!d)return d;const p=String(d).split("/");if(p.length===3&&p[2].length===2){const y=parseInt(p[2],10);p[2]=y<=49?`20${p[2].padStart(2,"0")}`:`19${p[2].padStart(2,"0")}`;}return p.join("/");}
 function dlCSV(content,name){const b=new Blob(["﻿"+content],{type:"text/csv;charset=utf-8;"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
+function isoToMDY(iso){if(!iso)return "";const[y,m,d]=iso.split("-");return `${parseInt(m)}/${parseInt(d)}/${y}`;}
+function localISODate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function addDays(ds,n){if(!ds)return "";const[m,d,y]=ds.split("/").map(Number);const dt=new Date(y,m-1,d);dt.setDate(dt.getDate()+n);return `${String(dt.getMonth()+1).padStart(2,"0")}/${String(dt.getDate()).padStart(2,"0")}/${dt.getFullYear()}`;}
 function subBizDays(ds,n){if(!ds)return "";const[m,d,y]=ds.split("/").map(Number);const dt=new Date(y,m-1,d);let rem=n;while(rem>0){dt.setDate(dt.getDate()-1);const dow=dt.getDay();if(dow!==0&&dow!==6)rem--;}return `${String(dt.getMonth()+1).padStart(2,"0")}/${String(dt.getDate()).padStart(2,"0")}/${dt.getFullYear()}`;}
 
 const PROMPT=`Extract data from this purchase order PDF. Return ONLY valid JSON, no markdown, no explanation.\n\n{"poNumber":"","orderDate":"MM/DD/YYYY","deliveryDate":"MM/DD/YYYY","shipDate":"MM/DD/YYYY or empty","cancelDate":"MM/DD/YYYY or empty","mustArriveByDate":"MM/DD/YYYY or empty","shipToName":"","shipToAttention":"","shipToAddress1":"","shipToAddress2":"","shipToCity":"","shipToState":"2-letter","shipToZip":"","shipToCountry":"2-letter","memo":"","lineItems":[{"upc":"","vendorItemNum":"","quantity":0,"unitPrice":0,"description":""}]}\n\nRules: mustArriveByDate=deliveryDate if only one date. shipDate/cancelDate=empty if not stated. memo=any delivery appointment or scheduling note on the PO (e.g. "Vendor to call Shipping Location for appointment"); leave empty if none. Extract ALL lines. ONLY JSON.`;
 
 const HY_VEE_PROMPT=`Extract data from this Hy-Vee purchase order PDF. Return ONLY valid JSON, no markdown, no explanation.\n\n{"poNumber":"","orderDate":"MM/DD/YYYY","mustArriveByDate":"MM/DD/YYYY","shipToName":"","shipToAttention":"","shipToAddress1":"","shipToAddress2":"","shipToCity":"","shipToState":"2-letter","shipToZip":"","shipToCountry":"2-letter","memo":"","lineItems":[{"mfgNum":"","prodNum":"","cases":0,"masterPack":0,"netCostPerCase":0,"description":""}]}\n\nRules: Each line item spans two rows. Row 1: 6-digit MFG# (in VENDOR column), Master Pack/Size, Order Code. Row 2: ORDER QTY (cases ordered), ORDER UNIT (CASES), 5-digit PROD#, description, then cost columns. mfgNum=6-digit MFG# from row 1. prodNum=5-digit PROD# from row 2. cases=ORDER QTY integer. masterPack=the integer before the backslash in the MASTER PACK/SIZE field (e.g. "6\\1EA-12X5" → 6). netCostPerCase=NET COST column value (third cost column). mustArriveByDate=SCHEDULE SHIPMENT TO ARRIVE ON date. memo=always empty string (ignore SPECIAL ALLOWANCES/MESSAGES). Extract ALL line items. ONLY JSON.`;
+
+const GNB_PROMPT=`This is a Global New Beginnings (GNBI) document. Identify its type and extract accordingly. Return ONLY valid JSON, no markdown, no explanation.\n\nIf this is a PURCHASE ORDER (has "PURCHASE ORDER" heading, a PO # field, and SKU line items with unit cost):\n{"docType":"po","poNumber":"number only e.g. 3320","orderDate":"MM/DD/YYYY","shipDate":"MM/DD/YYYY","sku":"exact SKU string e.g. RSMS150GBRR24","unitCost":0.0000}\n\nIf this is a DISTRIBUTION SHEET (table of fulfillment center rows with a Quill P.O. # column and ship-to addresses):\n{"docType":"distro","gnbiPoNumber":"","itemNum":"Item # value e.g. RSMS150GBRR24","quillSkuNum":"Quill SKU # value e.g. 3171196","primaryShipDate":"MM/DD/YYYY","locations":[{"quillPoNum":"e.g. XSYI66-1","name":"full center name e.g. Quill Fulfillment Center #472","address1":"street address line 1","address2":"street address line 2 if present else empty","city":"","state":"2-letter","zip":"","country":"US","quantity":0,"shipMethod":"Fed Ex Ground or UPS Ground","shipDate":"MM/DD/YYYY"}]}\n\nDistro rules: exclude rows where quantity=0. shipMethod must be exactly "Fed Ex Ground" or "UPS Ground" as shown. shipDate=the "Latest Acceptable Ship Date" for that row; if blank use primaryShipDate. ONLY JSON.`;
 
 const S = {
   card:{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"1.4rem 1.5rem",marginBottom:"1.1rem"},
@@ -63,6 +69,9 @@ export default function App() {
   const [shipMethod, setShipMethod] = useState("Route");
   const [orderStatus, setOrderStatus] = useState("Pending Fulfillment");
   const [memo, setMemo] = useState("");
+  const [gnbDate, setGnbDate] = useState(localISODate);
+  const [gnbUpsAccount, setGnbUpsAccount] = useState("8V4012");
+  const [gnbFedexAccount, setGnbFedexAccount] = useState("704499884");
   const [im, setIm] = useState(null);
   const [imSource, setImSource] = useState(null);
   // pdfs: { id, name, base64, status: 'loading'|'queued'|'processing'|'done'|'error', rows, unmatched, error }
@@ -197,7 +206,7 @@ export default function App() {
   };
 
   const resetAll = () => {
-    setPdfs([]); setResult(null); setRows([]); setErr(""); setBusy(false); setBusyMsg(""); setApproval(null); setApprovalOrderIdx(0); setMemo("");
+    setPdfs([]); setResult(null); setRows([]); setErr(""); setBusy(false); setBusyMsg(""); setApproval(null); setApprovalOrderIdx(0); setMemo(""); setGnbDate(localISODate()); setGnbUpsAccount("8V4012"); setGnbFedexAccount("704499884");
     if (pdfRef.current) pdfRef.current.value = "";
   };
 
@@ -224,14 +233,37 @@ export default function App() {
     {key:"shipZip",label:"Zip",w:90},
   ];
 
+  const GNB_APPROVAL_COLS = [
+    {key:"lineId",label:"Line ID",w:55},
+    {key:"date",label:"Date",w:95},
+    {key:"orderNum",label:"Quill PO #",w:110},
+    {key:"status",label:"Status",w:130},
+    {key:"nsSku",label:"NS SKU",w:190},
+    {key:"quantity",label:"Qty",w:65},
+    {key:"rate",label:"Rate",w:75},
+    {key:"amount",label:"Amount",w:85},
+    {key:"shipDate",label:"Ship Date",w:95},
+    {key:"cancelDate",label:"Cancel Date",w:95},
+    {key:"mabd",label:"MABD",w:95},
+    {key:"shipAddressee",label:"Ship To",w:200},
+    {key:"shipAddr1",label:"Address 1",w:160},
+    {key:"shipCity",label:"City",w:110},
+    {key:"shipState",label:"State",w:55},
+    {key:"shipZip",label:"Zip",w:80},
+    {key:"shipMethod",label:"Ship Method",w:110},
+    {key:"freightAccount",label:"Freight Acct #",w:110},
+    {key:"scac",label:"SCAC",w:65},
+  ];
+
   const initApproval = useCallback((allRows, curRetailer, curShipMethod, curMemo, curOrderStatus) => {
     const hasMismatchRows = allRows.some(r => r._poHasMismatch);
-    if (curOrderStatus !== "Pending Approval" && !hasMismatchRows || !allRows.length) { setApproval(null); return; }
+    const isGnb = RETAILERS[curRetailer]?.type === "gnb";
+    if ((curOrderStatus !== "Pending Approval" && !hasMismatchRows && !isGnb) || !allRows.length) { setApproval(null); return; }
     const rc = RETAILERS[curRetailer];
-    // Group rows by PO number, preserving insertion order
+    // GNB: group all rows under the blanket PO #; others: group by Quill/individual PO #
     const orderMap = new Map();
     allRows.forEach(r => {
-      const po = r["PO Number"] || r["Order #"] || "Unknown";
+      const po = isGnb ? (r["_gnbPoNumber"] || "GNB Order") : (r["PO Number"] || r["Order #"] || "Unknown");
       if (!orderMap.has(po)) orderMap.set(po, []);
       orderMap.get(po).push(r);
     });
@@ -244,9 +276,10 @@ export default function App() {
         orderNum: r["Order #"] || "",
         poNumber: r["PO Number"] || "",
         status: r._poHasMismatch ? "Pending Approval" : curOrderStatus,
-        name: r["NS CUSTOMER"] || rc.nsCustomer,
+        name: r["NS CUSTOMER"] || rc?.nsCustomer || "",
         externalId: r["External ID"] || "",
         description: r["Description"] || "",
+        nsSku: r["NS SKU"] || "",
         quantity: r["Quantity"] ?? 0,
         rate: r["Rate"] ?? 0,
         amount: r["Amount"] ?? 0,
@@ -260,6 +293,9 @@ export default function App() {
         shipCity: r["City"] || "",
         shipState: r["State"] || "",
         shipZip: r["Zip"] || "",
+        shipMethod: r["Ship Method"] || "",
+        freightAccount: r["Freight Account #"] || "",
+        scac: r["SCAC"] || "",
         caseMismatch: !!r["_caseMismatch"],
       })),
     }));
@@ -289,8 +325,25 @@ export default function App() {
 
   const exportApprovalXLSX = () => {
     if (!approval) return;
-    const headers = ["Line ID","Date","Order #","PO/Check Number","Status","Name","External ID","Description","Quantity","Item Rate","Amount","Ship Date","Cancel Date","Must Arrive By Date","Status","Shipping Addressee","Shipping Address 1","Shipping Address 2","Shipping City","Shipping State/Province","Shipping Zip"];
+    const poNums = approval.orders.map(o => o.poNumber).join("_");
     const allLines = approval.orders.flatMap(o => o.lines);
+    if (RETAILERS[retailer]?.type === "gnb") {
+      const headers = ["Line ID","Date","Quill PO #","Status","NS SKU","Quantity","Rate","Amount","Ship Date","Cancel Date","Must Arrive By Date","Ship To","Address 1","City","State","Zip","Ship Method","Freight Account #","SCAC"];
+      const data = [headers, ...allLines.map(l => [
+        l.lineId, l.date, l.orderNum, l.status, l.nsSku,
+        parseFloat(l.quantity)||0, parseFloat(l.rate)||0, parseFloat(l.amount)||0,
+        l.shipDate, l.cancelDate, l.mabd,
+        l.shipAddressee, l.shipAddr1, l.shipCity, l.shipState, l.shipZip,
+        l.shipMethod, l.freightAccount, l.scac
+      ])];
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      ws["!cols"] = [8,12,14,16,22,10,10,12,12,12,16,28,26,14,8,10,14,14,8].map(wch=>({wch}));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "GNB Order Review");
+      XLSX.writeFile(wb, `GNB_PO${poNums}_Review.xlsx`);
+      return;
+    }
+    const headers = ["Line ID","Date","Order #","PO/Check Number","Status","Name","External ID","Description","Quantity","Item Rate","Amount","Ship Date","Cancel Date","Must Arrive By Date","Status","Shipping Addressee","Shipping Address 1","Shipping Address 2","Shipping City","Shipping State/Province","Shipping Zip"];
     const data = [
       headers,
       ...allLines.map(l => [
@@ -305,7 +358,6 @@ export default function App() {
     ws["!cols"] = [8,12,12,16,16,35,16,28,10,10,12,12,12,16,16,28,28,15,15,10,12].map(wch=>({wch}));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Approval");
-    const poNums = approval.orders.map(o => o.poNumber).join("_");
     XLSX.writeFile(wb, `${poNums.replace(/[^a-zA-Z0-9_]/g,"_")}_Approval.xlsx`);
   };
 
@@ -316,6 +368,82 @@ export default function App() {
 
     // Track changes locally to avoid stale-closure issues across async iterations
     let currentPdfs = [...pdfs];
+
+    if (RETAILERS[retailer]?.type === "gnb") {
+      const rc = RETAILERS[retailer];
+      const gnbExtracted = [];
+      for (let i = 0; i < queued.length; i++) {
+        const pdfItem = queued[i];
+        setBusyMsg(`Processing ${i+1} of ${queued.length}: ${pdfItem.name}`);
+        currentPdfs = currentPdfs.map(p => p.id === pdfItem.id ? { ...p, status: "processing" } : p);
+        setPdfs([...currentPdfs]);
+        try {
+          const resp = await fetch("/api/anthropic/v1/messages", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 4096, system: GNB_PROMPT,
+              messages: [{ role: "user", content: [
+                { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfItem.base64 } },
+                { type: "text", text: "Extract the document data." }
+              ]}]
+            })
+          });
+          const data = await resp.json();
+          if (!resp.ok || data.error) throw new Error(data.error?.message || `API error ${resp.status}`);
+          const raw = data.content?.find(b => b.type === "text")?.text || "";
+          const extracted = JSON.parse(raw.replace(/```json|```/g,"").trim());
+          gnbExtracted.push({ id: pdfItem.id, data: extracted });
+          currentPdfs = currentPdfs.map(p => p.id === pdfItem.id ? { ...p, status: "done", rows: [], unmatched: [] } : p);
+        } catch(e) {
+          currentPdfs = currentPdfs.map(p => p.id === pdfItem.id ? { ...p, status: "error", error: e.message } : p);
+        }
+        setPdfs([...currentPdfs]);
+      }
+      const poData = gnbExtracted.find(r => r.data?.docType === "po")?.data;
+      const distroData = gnbExtracted.find(r => r.data?.docType === "distro")?.data;
+      if (!poData || !distroData) {
+        setErr(!poData && !distroData ? "Upload both the GNB blanket PO and distro sheet." : !poData ? "Blanket PO not recognized — ensure both PDFs are uploaded." : "Distro sheet not recognized — ensure both PDFs are uploaded.");
+        setBusy(false); return;
+      }
+      const poSkuNorm = String(poData.sku || "").trim().toUpperCase();
+      const distroItemNorm = String(distroData.itemNum || "").trim().toUpperCase();
+      const skuMismatch = poSkuNorm && distroItemNorm && poSkuNorm !== distroItemNorm ? { poSku: poData.sku, distroItemNum: distroData.itemNum } : null;
+      const itemMatch = im?.length ? lookup(im, null, poData.sku) : null;
+      const nsSku = itemMatch ? String(itemMatch["Name"] || "").trim() : poData.sku || "";
+      const externalId = itemMatch ? String(itemMatch["External ID"] || "").trim() : poData.sku || "";
+      const gnbUnmatched = itemMatch ? [] : (poData.sku ? [poData.sku] : []);
+      const GNB_SHIP_MAP = {
+        "Fed Ex Ground": { method: "Fedex Ground", account: gnbFedexAccount, scac: "FDEG" },
+        "FedEx Ground":  { method: "Fedex Ground", account: gnbFedexAccount, scac: "FDEG" },
+        "UPS Ground":    { method: "UPS Ground",   account: gnbUpsAccount,   scac: "UPSN" },
+      };
+      const todayDate = isoToMDY(gnbDate) || new Date().toLocaleDateString("en-US");
+      const allGnbRows = (distroData.locations || []).filter(loc => (Number(loc.quantity)||0) > 0).map(loc => {
+        const sm = GNB_SHIP_MAP[loc.shipMethod] || { method: shipMethod, account: "", scac: "" };
+        const shipDate = fmtDate(loc.shipDate || distroData.primaryShipDate || "");
+        const mabd = shipDate ? addDays(shipDate, 7) : "";
+        const qty = Number(loc.quantity) || 0;
+        const rate = Number(poData.unitCost) || 0;
+        return {
+          "Order #": loc.quillPoNum || "", "NS SKU": nsSku, "Customer Part Number": distroData.quillSkuNum || "",
+          "Date": todayDate, "Quantity": qty, "Rate": rate, "Amount": parseFloat((qty * rate).toFixed(2)),
+          "Is EDI Sent": rc.isEdiSent, "PO Number": loc.quillPoNum || "", "NS CUSTOMER": rc.nsCustomer,
+          "Price Level": rc.priceLevel, "Status": orderStatus,
+          "Ship Date": shipDate, "Cancel Date": shipDate, "Must Arrive By Date": mabd,
+          "Name": loc.name || "", "Attention": "", "Address 1": loc.address1 || "", "Address 2": loc.address2 || "",
+          "City": loc.city || "", "State": loc.state || "", "Zip": loc.zip || "", "Country": loc.country || "US",
+          "Ship Method": sm.method, "Freight Account #": sm.account, "SCAC": sm.scac,
+          "Memo": `Shipping instructions for Quill order: SHIP FREIGHT COLLECT (PO ${poData.poNumber})`,
+          "External ID": externalId, "_gnbSkuMismatch": !!skuMismatch, "_gnbPoNumber": String(poData.poNumber || ""),
+        };
+      });
+      const distroId = gnbExtracted.find(r => r.data?.docType === "distro")?.id;
+      if (distroId) currentPdfs = currentPdfs.map(p => p.id === distroId ? { ...p, rows: allGnbRows, unmatched: gnbUnmatched } : p);
+      setPdfs([...currentPdfs]);
+      setRows(allGnbRows);
+      setResult({ totalPOs: 1, failedPOs: currentPdfs.filter(p => p.status === "error").length, allUnmatched: gnbUnmatched, allCaseMismatches: [], skuMismatch });
+      initApproval(allGnbRows, retailer, shipMethod, memo, orderStatus);
+      setBusy(false); return;
+    }
 
     for (let i = 0; i < queued.length; i++) {
       const pdfItem = queued[i];
@@ -438,14 +566,26 @@ export default function App() {
 
   // Overlay current settings onto stored rows so changing dropdowns updates results instantly
   const rc = RETAILERS[retailer] || {};
+  const isGnbRetailer = rc.type === "gnb";
+  const activeCols = isGnbRetailer ? GNB_APPROVAL_COLS : APPROVAL_COLS;
+  const amountColIdx = activeCols.findIndex(c => c.key === "amount");
   const effectiveRows = rows.map(r => ({
     ...r,
-    "Ship Method": shipMethod,
+    // GNB rows carry per-row ship method from distro; don't override with global selector
+    ...(!isGnbRetailer && { "Ship Method": shipMethod }),
+    // GNB date and account numbers come from the inputs and update live
+    ...(isGnbRetailer && gnbDate ? { "Date": isoToMDY(gnbDate) } : {}),
+    ...(isGnbRetailer ? {
+      "Freight Account #":
+        r["Ship Method"] === "Fedex Ground" ? gnbFedexAccount :
+        r["Ship Method"] === "UPS Ground"   ? gnbUpsAccount   : "",
+    } : {}),
     "Status": r._poHasMismatch ? "Pending Approval" : orderStatus,
     "NS CUSTOMER": rc.nsCustomer,
     "Price Level": rc.priceLevel,
     "Is EDI Sent": rc.isEdiSent,
-    ...(memo ? { "Memo": memo } : {}),
+    // GNB memo is auto-generated per row; don't override
+    ...(!isGnbRetailer && memo ? { "Memo": memo } : {}),
   }));
   const total = effectiveRows.reduce((s, r) => s + Number(r["Amount"]), 0);
   const queuedCount = pdfs.filter(p => p.status === "queued").length;
@@ -494,10 +634,27 @@ export default function App() {
             </select>
           </div>
         </div>
-        <div>
-          <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Memo <span style={{fontWeight:400,color:"var(--color-text-tertiary)"}}>— optional</span></label>
-          <input style={{...S.input,padding:"7px 10px",fontSize:13}} type="text" placeholder="e.g. Spring 2026 Drop" value={memo} onChange={e=>setMemo(e.target.value)} disabled={busy}/>
-        </div>
+        {isGnbRetailer ? (
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+            <div>
+              <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Order date</label>
+              <input style={{...S.input,padding:"7px 10px",fontSize:13}} type="date" value={gnbDate} onChange={e=>setGnbDate(e.target.value)} disabled={busy}/>
+            </div>
+            <div>
+              <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>UPS Account #</label>
+              <input style={{...S.input,padding:"7px 10px",fontSize:13}} type="text" value={gnbUpsAccount} onChange={e=>setGnbUpsAccount(e.target.value)} disabled={busy}/>
+            </div>
+            <div>
+              <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>FedEx Account #</label>
+              <input style={{...S.input,padding:"7px 10px",fontSize:13}} type="text" value={gnbFedexAccount} onChange={e=>setGnbFedexAccount(e.target.value)} disabled={busy}/>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Memo <span style={{fontWeight:400,color:"var(--color-text-tertiary)"}}>— optional</span></label>
+            <input style={{...S.input,padding:"7px 10px",fontSize:13}} type="text" placeholder="e.g. Spring 2026 Drop" value={memo} onChange={e=>setMemo(e.target.value)} disabled={busy}/>
+          </div>
+        )}
       </div>}
 
       {/* Item Master */}
@@ -547,8 +704,8 @@ export default function App() {
             onDragLeave={()=>setPdfDrag(false)}
             onDrop={e=>{e.preventDefault();setPdfDrag(false);handleFiles(e.dataTransfer.files);}}>
             <i className="ti ti-file-type-pdf" aria-hidden="true" style={{fontSize:36,color:"var(--color-text-secondary)",display:"block",marginBottom:10}}/>
-            <p style={{fontSize:15,fontWeight:500,color:"var(--color-text-primary)",margin:0}}>Click or drag to upload PO PDFs</p>
-            <p style={{fontSize:13,color:"var(--color-text-secondary)",margin:"6px 0 0"}}>Select multiple files at once · ZIP supported · any retailer format</p>
+            <p style={{fontSize:15,fontWeight:500,color:"var(--color-text-primary)",margin:0}}>{isGnbRetailer?"Click or drag to upload GNB blanket PO + distro sheet":"Click or drag to upload PO PDFs"}</p>
+            <p style={{fontSize:13,color:"var(--color-text-secondary)",margin:"6px 0 0"}}>{isGnbRetailer?"Drop both PDFs together — the app will detect which is which":"Select multiple files at once · ZIP supported · any retailer format"}</p>
           </div>
           {import.meta.env.DEV&&<button onClick={loadTestPDFs} style={{marginTop:8,fontSize:12,padding:"5px 12px",fontFamily:"var(--font-sans)",border:"1px dashed var(--color-border-secondary)",borderRadius:6,background:"transparent",color:"var(--color-text-tertiary)",cursor:"pointer"}}>⚙ Load test PDFs</button>}
           </>
@@ -623,6 +780,7 @@ export default function App() {
           <div style={S.stat}><div style={S.statLabel}>Total</div><div style={S.statVal}>${total.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
         </div>
 
+        {result.skuMismatch&&<div style={S.msgWarn}><i className="ti ti-alert-triangle" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/><span><strong>SKU Mismatch:</strong> PO SKU ({result.skuMismatch.poSku}) does not match distro sheet Item # ({result.skuMismatch.distroItemNum}). Verify before importing.</span></div>}
         {result.allUnmatched?.length>0&&<div style={S.msgWarn}><i className="ti ti-alert-triangle" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/><span><strong>Unmatched:</strong> {result.allUnmatched.join(", ")} — vendor item # used as fallback</span></div>}
         {result.allCaseMismatches?.length>0&&<div style={S.msgWarn}><span><strong>⚠️ {result.allCaseMismatches.length>1?"Case Pack Mismatch Warnings":"Case Pack Mismatch Warning"}</strong><br/>{result.allCaseMismatches.map((m,i)=><span key={i}>{m}.<br/></span>)}<br/>{result.allCaseMismatches.length>1?"Contact buyer to get the POs revised to full case packs. The POs have been updated to Pending Approval pending the buyer's change.":"Contact buyer to get the PO revised to full case packs. The PO has been updated to Pending Approval pending the buyer's change."}</span></div>}
         {!result.allUnmatched?.length&&im&&<div style={S.msgOk}><i className="ti ti-circle-check" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/>All items matched to item master</div>}
@@ -649,10 +807,10 @@ export default function App() {
               </div>
             )}
             <div style={{overflowX:"auto",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8,marginBottom:8}}>
-              <table style={{borderCollapse:"collapse",tableLayout:"fixed",minWidth:APPROVAL_COLS.reduce((s,c)=>s+c.w,0)}}>
+              <table style={{borderCollapse:"collapse",tableLayout:"fixed",minWidth:activeCols.reduce((s,c)=>s+c.w,0)}}>
                 <thead>
                   <tr style={{background:"#BEBEBE"}}>
-                    {APPROVAL_COLS.map(col=>(
+                    {activeCols.map(col=>(
                       <th key={col.key} style={{...S.th,width:col.w,minWidth:col.w}}>{col.label}</th>
                     ))}
                   </tr>
@@ -660,13 +818,14 @@ export default function App() {
                 <tbody>
                   {curOrder.lines.map((line,li)=>(
                     <tr key={li}>
-                      {APPROVAL_COLS.map(col=>(
+                      {activeCols.map(col=>(
                         <td key={col.key} style={{...S.td,borderBottom:li<curOrder.lines.length-1?"0.5px solid var(--color-border-tertiary)":"none",padding:"3px 4px"}}>
                           <input
                             style={{width:"100%",boxSizing:"border-box",padding:"4px 6px",fontSize:12,fontFamily:"var(--font-sans)",border:"1px solid transparent",borderRadius:4,background:"transparent",color:line.caseMismatch?"#ef4444":"var(--color-text-primary)",outline:"none"}}
-                            value={String(line[col.key]??"")}
+                            value={String(isGnbRetailer&&col.key==="date"?(isoToMDY(gnbDate)||line[col.key]):(line[col.key]??""))}
+                            readOnly={isGnbRetailer&&col.key==="date"}
                             onChange={e=>updateApprovalLine(approvalOrderIdx,li,col.key,e.target.value)}
-                            onFocus={e=>e.target.style.borderColor="var(--color-border-info)"}
+                            onFocus={e=>{if(!(isGnbRetailer&&col.key==="date"))e.target.style.borderColor="var(--color-border-info)";}}
                             onBlur={e=>e.target.style.borderColor="transparent"}
                           />
                         </td>
@@ -676,9 +835,9 @@ export default function App() {
                 </tbody>
                 <tfoot>
                   <tr style={{background:"#BEBEBE"}}>
-                    <td colSpan={10} style={{...S.td,fontWeight:600,textAlign:"right",padding:"7px 12px"}}>Total</td>
+                    <td colSpan={amountColIdx} style={{...S.td,fontWeight:600,textAlign:"right",padding:"7px 12px"}}>Total</td>
                     <td style={{...S.td,fontWeight:600,padding:"7px 8px"}}>${orderTotal.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-                    <td colSpan={APPROVAL_COLS.length-11}/>
+                    <td colSpan={activeCols.length-amountColIdx-1}/>
                   </tr>
                 </tfoot>
               </table>
@@ -715,8 +874,8 @@ export default function App() {
 
         <div style={{display:"flex",gap:10,justifyContent:"space-between"}}>
           <button style={S.btnOutline} onClick={resetAll}><i className="ti ti-refresh" aria-hidden="true" style={{fontSize:15}}/>New batch</button>
-          <button style={S.btnSuccess} onClick={()=>dlCSV(buildCSV(effectiveRows),`NS_${retailer.replace(/\s+/g,"_")}_${result.totalPOs}PO${result.totalPOs!==1?"s":""}.csv`)}><i className="ti ti-download" aria-hidden="true" style={{fontSize:15}}/>Download CSV</button>
-          <a href="https://4848284.app.netsuite.com/app/setup/assistants/nsimport/importassistant.nl?recid=206&new=T" target="_blank" rel="noreferrer" style={{...S.btnOutline,textDecoration:"none"}}><i className="ti ti-upload" aria-hidden="true" style={{fontSize:15}}/>Import CSV into NS</a>
+          <button style={S.btnSuccess} onClick={()=>dlCSV(isGnbRetailer?buildGnbCSV(effectiveRows):buildCSV(effectiveRows),`NS_${retailer.replace(/\s+/g,"_")}_${result.totalPOs}PO${result.totalPOs!==1?"s":""}.csv`)}><i className="ti ti-download" aria-hidden="true" style={{fontSize:15}}/>Download CSV</button>
+          <a href={isGnbRetailer?"https://4848284.app.netsuite.com/app/setup/assistants/nsimport/importassistant.nl?recid=214&new=T":"https://4848284.app.netsuite.com/app/setup/assistants/nsimport/importassistant.nl?recid=206&new=T"} target="_blank" rel="noreferrer" style={{...S.btnOutline,textDecoration:"none"}}><i className="ti ti-upload" aria-hidden="true" style={{fontSize:15}}/>Import CSV into NS</a>
         </div>
       </>)}
       </>}
