@@ -15,6 +15,7 @@ const RETAILERS = {
   "Sur La Table": { nsCustomer: "Sur La Table", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
   "TJ Maxx Canada": { nsCustomer: "TJ Maxx Canada", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
   "Verdi Commerce LLC": { nsCustomer: "Verdi Commerce LLC", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
+  "Walmart Marketplace": { nsCustomer: "Walmart Corporate : Walmart Marketplace", shipMethod: "Route", status: "Pending Fulfillment", priceLevel: "Custom", isEdiSent: "No", isSample: "No", dev: true },
 };
 const SHIP_METHODS = ["Collect","DPP","FedEx 2Day","FedEx Ground","FedEx Home Delivery","FedEx International Econ","FedEx SmartPost","Fedex Standard Overnight","Route","ROUTEPPD","UPS 2-Day","UPS 3-Day","UPS Express Saver","UPS Ground","UPS Overnight","UPS Surepost","USPS","USPS Ground Advantage"];
 const STATUSES = ["Pending Fulfillment","Pending Approval"];
@@ -501,9 +502,9 @@ export default function App() {
       }
 
       const GNB_SHIP_MAP = {
-        "Fed Ex Ground": { method: "Fedex Ground", account: gnbFedexAccount, scac: "FDEG" },
-        "FedEx Ground":  { method: "Fedex Ground", account: gnbFedexAccount, scac: "FDEG" },
-        "UPS Ground":    { method: "UPS Ground",   account: gnbUpsAccount,   scac: "UPSN" },
+        "Fed Ex Ground": { method: "Collect", account: gnbFedexAccount, scac: "FDEG" },
+        "FedEx Ground":  { method: "Collect", account: gnbFedexAccount, scac: "FDEG" },
+        "UPS Ground":    { method: "Collect", account: gnbUpsAccount,   scac: "UPSN" },
       };
       const todayDate = isoToMDY(gnbDate) || new Date().toLocaleDateString("en-US");
 
@@ -525,6 +526,8 @@ export default function App() {
           let resolvedMethod, resolvedAccount, resolvedScac, ltlNote = "";
           if (sm) {
             resolvedMethod = sm.method; resolvedAccount = sm.account; resolvedScac = sm.scac;
+            const parcelLabel = (loc.shipMethod === "Fed Ex Ground" || loc.shipMethod === "FedEx Ground") ? "Fedex Ground" : "UPS Ground";
+            ltlNote = ` | Ship small parcel with ${parcelLabel}`;
           } else {
             resolvedMethod = "Collect"; resolvedAccount = "";
             const rawScac = String(loc.scac || "").trim();
@@ -541,7 +544,7 @@ export default function App() {
             "City": loc.city || "", "State": loc.state || "", "Zip": loc.zip || "", "Country": loc.country || "US",
             "Ship Method": resolvedMethod, "Freight Account #": resolvedAccount, "SCAC": resolvedScac,
             "Memo": `Shipping instructions for Quill order: SHIP FREIGHT COLLECT (PO ${poData.poNumber})${ltlNote}`,
-            "External ID": externalId, "_gnbPoNumber": String(poData.poNumber || ""),
+            "External ID": externalId, "_gnbPoNumber": String(poData.poNumber || ""), "_gnbCarrier": String(loc.shipMethod || ""),
           };
         });
 
@@ -750,8 +753,8 @@ export default function App() {
     ...(isGnbRetailer && gnbDate ? { "Date": isoToMDY(gnbDate) } : {}),
     ...(isGnbRetailer ? {
       "Freight Account #":
-        r["Ship Method"] === "Fedex Ground" ? gnbFedexAccount :
-        r["Ship Method"] === "UPS Ground"   ? gnbUpsAccount   : "",
+        r["_gnbCarrier"] === "Fed Ex Ground" || r["_gnbCarrier"] === "FedEx Ground" ? gnbFedexAccount :
+        r["_gnbCarrier"] === "UPS Ground" ? gnbUpsAccount : r["Freight Account #"] || "",
     } : {}),
     "Status": r._poHasMismatch ? "Pending Approval" : orderStatus,
     "NS CUSTOMER": retailer === "Samples" && samplesSubcustomer ? `Samples : Samples - ${samplesSubcustomer}` : rc.nsCustomer,
