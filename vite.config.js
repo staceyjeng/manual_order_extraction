@@ -91,6 +91,38 @@ function netsuitePlugin(env) {
         }
       });
 
+      server.middlewares.use('/api/netsuite/itemmaster-restlet', async (req, res) => {
+        if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
+        const restletUrl = env.NS_RESTLET_ITEMMASTER;
+        if (!restletUrl) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'NS_RESTLET_ITEMMASTER not set in .env', items: [] }));
+          return;
+        }
+        try {
+          const qs = new URL(req.url, 'http://localhost').searchParams;
+          const searchId = qs.get('searchId');
+          const targetUrl = searchId ? `${restletUrl}&searchId=${encodeURIComponent(searchId)}` : restletUrl;
+          const oauth = makeOAuth(env);
+          const token = { key: env.NS_TOKEN_ID, secret: env.NS_TOKEN_SECRET };
+          const auth = oauth.toHeader(oauth.authorize({ url: targetUrl, method: 'GET' }, token)).Authorization;
+          const r = await fetch(targetUrl, {
+            method: 'GET',
+            headers: { Authorization: auth, 'Content-Type': 'application/json' },
+          });
+          const txt = await r.text();
+          if (!r.ok) throw new Error(`RESTlet ${r.status}: ${txt.slice(0, 500)}`);
+          const data = JSON.parse(txt);
+          console.log(`[NS] RESTlet item master (${searchId||'default'}): ${data.count ?? data.items?.length ?? '?'} items`);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(data));
+        } catch (e) {
+          console.error('[NS] RESTlet error:', e.message);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: e.message, items: [] }));
+        }
+      });
+
       server.middlewares.use('/api/netsuite/itemmaster', async (req, res) => {
         if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
         try {
