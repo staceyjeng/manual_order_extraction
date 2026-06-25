@@ -189,26 +189,31 @@ export default function App() {
   const [showHdrCols, setShowHdrCols] = useState(true);
   const [err, setErr] = useState("");
   const [settingsTab, setSettingsTab] = useState("main");
+  const [settingsTouched, setSettingsTouched] = useState(false);
   const pdfRef = useRef();
   const imRef = useRef();
 
   useEffect(()=>{
     (async()=>{
       try{
-        const nsRes=await fetch('/api/netsuite/itemmaster');
+        const nsRes=await fetch('/api/netsuite/itemmaster-restlet');
         if(nsRes.ok){
           const data=await nsRes.json();
           if(!data.error&&data.items?.length){
-            setIm(data.items);
-            setImSource(`NetSuite · ${data.items.length} items`);
-            localStorage.setItem(IM_KEY,JSON.stringify({items:data.items,savedAt:new Date().toLocaleDateString()}));
-            return;
+            const find=(row,...labels)=>{for(const l of labels){const k=Object.keys(row).find(k=>k.toLowerCase()===l.toLowerCase());if(k&&row[k])return row[k];}return '';};
+            const items=data.items.map(r=>({'Child SKU':find(r,'child sku'),'Parent SKU':find(r,'parent sku'),'UPC Code':find(r,'upc code'),'Case UPC':find(r,'case upc'),'Casepack Outer':find(r,'casepack outer'),'Description':find(r,'description','name')})).filter(r=>r['Child SKU']);
+            if(items.length){
+              setIm(items);
+              setImSource(`NetSuite · ${items.length} items`);
+              localStorage.setItem(IM_KEY,JSON.stringify({items,savedAt:new Date().toLocaleDateString()}));
+              return;
+            }
           }
         }
       }catch(_){}
       try{
         const s=localStorage.getItem(IM_KEY);
-        if(s){const p=JSON.parse(s);if(p.items?.length){setIm(p.items);setImSource(`CSV · ${p.items.length} items · cached ${p.savedAt||""}`);}}
+        if(s){const p=JSON.parse(s);if(p.items?.length){setIm(p.items);setImSource(`Cached · ${p.items.length} items · ${p.savedAt||""}`);}}
       }catch(_){}
     })();
   },[]);
@@ -242,7 +247,7 @@ export default function App() {
     return null;
   },[]);
 
-  const handleRetailer=(r)=>{if(r!==retailer){resetAll();setSamplesSubcustomer("");}setRetailer(r);if(RETAILERS[r]){const saved=retailerOverrides[r];const isSamples=r==="Samples";setShipMethod(saved?.shipMethod??RETAILERS[r].shipMethod);setOrderStatus(isSamples?RETAILERS[r].status:(saved?.status??RETAILERS[r].status));setMemo(isSamples?(RETAILERS[r].defaultMemo||""):(saved?.memo!==undefined?saved.memo:(RETAILERS[r].defaultMemo||"")));}};;
+  const handleRetailer=(r)=>{if(r!==retailer){resetAll();setSamplesSubcustomer("");}setRetailer(r);setSettingsTouched(false);if(RETAILERS[r]){const saved=retailerOverrides[r];const isSamples=r==="Samples";setShipMethod(saved?.shipMethod??RETAILERS[r].shipMethod);setOrderStatus(isSamples?RETAILERS[r].status:(saved?.status??RETAILERS[r].status));setMemo(isSamples?(RETAILERS[r].defaultMemo||""):(saved?.memo!==undefined?saved.memo:(RETAILERS[r].defaultMemo||"")));}};;
 
 
   const addPDFs = (files) => {
@@ -324,7 +329,7 @@ export default function App() {
   const resetAll = () => {
     const saved=retailerOverrides[retailer];const rc=RETAILERS[retailer]||{};
     const defaultMemo=retailer==="Samples"?(rc.defaultMemo||""):(saved?.memo!==undefined?saved.memo:(rc.defaultMemo||""));
-    setPdfs([]); setResult(null); setRows([]); setRowOverrides([]); setErr(""); setBusy(false); setBusyMsg(""); setMemo(defaultMemo); setGnbDate(localISODate()); setGnbUpsAccount("8V4012"); setGnbFedexAccount("704499884"); setSamplesSubcustomer(""); setSamplesText(""); setSamplesShipDate(""); setSamplesCancelDate(""); setSamplesMabd("");
+    setPdfs([]); setResult(null); setRows([]); setRowOverrides([]); setErr(""); setBusy(false); setBusyMsg(""); setMemo(defaultMemo); setGnbDate(localISODate()); setGnbUpsAccount("8V4012"); setGnbFedexAccount("704499884"); setSamplesSubcustomer(""); setSamplesText(""); setSamplesShipDate(""); setSamplesCancelDate(""); setSamplesMabd(""); setSettingsTouched(false);
     if (pdfRef.current) pdfRef.current.value = "";
   };
 
@@ -377,6 +382,7 @@ export default function App() {
               "Zip": order.shipToZip || "", "Country": order.shipToCountry || "US",
               "Ship Method": shipMethod, "Memo": order.memo || memo || "",
               "Parent SKU": parentSku,
+              "_unmatched": !m && !!line.sku,
               "Item": parentSku ? `${parentSku} : ${nsSku}` : nsSku || "",
             });
           });
@@ -496,6 +502,7 @@ export default function App() {
             "Ship Method": resolvedMethod, "Freight Account #": resolvedAccount, "SCAC": resolvedScac,
             "Memo": `Shipping instructions for Quill order: SHIP FREIGHT COLLECT (PO ${poData.poNumber})${ltlNote}`,
             "Parent SKU": parentSku, "_gnbPoNumber": String(poData.poNumber || ""), "_gnbCarrier": String(loc.shipMethod || ""),
+            "_unmatched": !itemMatch,
             "Item": parentSku ? `${parentSku} : ${nsSku}` : nsSku || "",
           };
         });
@@ -641,6 +648,7 @@ export default function App() {
 
         for (const line of po.lineItems) {
           let nsSku = "", parentSku = "", qty = 0, rate = 0, rowCaseMismatch = false, rowDepartment = "", rowCustomerPartNum = "";
+          const prevUnmatchedLen = unmatched.length;
 
           if (isHyVee) {
             const upc11 = String(line.mfgNum || "").substring(0, 6) + String(line.prodNum || "").padStart(5, "0").substring(0, 5);
@@ -899,6 +907,7 @@ export default function App() {
             "Parent SKU": parentSku,
             "Item": parentSku ? `${parentSku} : ${nsSku}` : nsSku || "",
             "_caseMismatch": rowCaseMismatch,
+            "_unmatched": unmatched.length > prevUnmatchedLen,
           });
         }
 
@@ -1033,14 +1042,14 @@ export default function App() {
           )}
           <div>
             <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Ship method</label>
-            <select style={{...S.select,padding:"7px 10px",fontSize:13}} value={shipMethod} onChange={e=>setShipMethod(e.target.value)} disabled={busy}>
+            <select style={{...S.select,padding:"7px 10px",fontSize:13}} value={shipMethod} onChange={e=>{setShipMethod(e.target.value);setSettingsTouched(true);}} disabled={busy}>
               <option value="">-Leave Blank-</option>
               {SHIP_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
             </select>
           </div>
           <div>
             <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Status</label>
-            <select style={{...S.select,padding:"7px 10px",fontSize:13}} value={orderStatus} onChange={e=>setOrderStatus(e.target.value)} disabled={busy}>
+            <select style={{...S.select,padding:"7px 10px",fontSize:13}} value={orderStatus} onChange={e=>{setOrderStatus(e.target.value);setSettingsTouched(true);}} disabled={busy}>
               {STATUSES.map(s=><option key={s}>{s}</option>)}
             </select>
           </div>
@@ -1077,10 +1086,10 @@ export default function App() {
         ) : (
           <div>
             <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Memo <span style={{fontWeight:400,color:"var(--color-text-tertiary)"}}>— optional</span></label>
-            <input style={{...S.input,padding:"7px 10px",fontSize:13}} type="text" placeholder="e.g. Spring 2026 Drop" value={memo} onChange={e=>setMemo(e.target.value)} disabled={busy}/>
+            <input style={{...S.input,padding:"7px 10px",fontSize:13}} type="text" placeholder="e.g. Spring 2026 Drop" value={memo} onChange={e=>{setMemo(e.target.value);setSettingsTouched(true);}} disabled={busy}/>
           </div>
         )}
-        {settingsChanged&&!(memoIsHardcoded&&shipMethod===activeDefaults?.shipMethod&&orderStatus===activeDefaults?.status)&&(
+        {settingsTouched&&settingsChanged&&!(memoIsHardcoded&&shipMethod===activeDefaults?.shipMethod&&orderStatus===activeDefaults?.status)&&(
           <p style={{marginTop:8,fontSize:12,color:"var(--color-text-tertiary)"}}>
             Changes will apply to this extraction.{" "}
             <span onClick={saveRetailerDefaults} style={{color:"var(--color-text-secondary)",textDecoration:"underline",cursor:"pointer"}}>Click here</span>
@@ -1101,11 +1110,15 @@ export default function App() {
           {im?.length?(
             <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
               <span style={{fontSize:13,color:"var(--color-text-success)",fontWeight:500}}>{imSource}</span>
-              <span style={{fontSize:12,color:"var(--color-text-secondary)"}}>
-                {"To refresh Item Master, "}
-                <a href="https://4848284.app.netsuite.com/app/common/search/searchredirect.nl?id=166419&siaT=1781731236942&siaWhc=%2Fapp%2Fcommon%2Fsearch%2Fsearchresults.nl&siaPs=0&siaPfx=search&siaQ=claude&siaNv=gs" target="_blank" rel="noreferrer" style={{color:"var(--color-text-primary)",fontWeight:500}}>export from NS</a>
-                {" and "}
-                <span style={{cursor:"pointer",color:"var(--color-text-primary)",fontWeight:500,textDecoration:"underline"}} onClick={()=>imRef.current?.click()}>replace</span>
+              <span style={{fontSize:12,color:"var(--color-text-secondary)",textAlign:"right"}}>
+                Item Master loads live from the NetSuite API on every refresh.<br/>
+                <span style={{color:"var(--color-text-tertiary)"}}>
+                  Only{" "}
+                  <a href="https://4848284.app.netsuite.com/app/common/search/searchresults.nl?searchid=166419&whence=" target="_blank" rel="noreferrer" style={{color:"var(--color-text-secondary)",fontWeight:500}}>download the saved search</a>
+                  {" "}as a CSV and{" "}
+                  <span style={{cursor:"pointer",color:"var(--color-text-secondary)",fontWeight:500,textDecoration:"underline"}} onClick={()=>imRef.current?.click()}>upload here</span>
+                  {" "}as a failsafe if the API is unavailable
+                </span>
               </span>
             </div>
           ):imSource?(
@@ -1115,9 +1128,7 @@ export default function App() {
             </div>
           ):(
             <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>
-              <a href="https://4848284.app.netsuite.com/app/common/search/searchresults.nl?searchid=166419&whence=" target="_blank" rel="noreferrer" style={{color:"var(--color-text-primary)",fontWeight:500}}>Export from NS</a>
-              {" then "}
-              <span style={{cursor:"pointer",color:"var(--color-text-primary)",fontWeight:500,textDecoration:"underline"}} onClick={()=>imRef.current?.click()}>upload CSV</span>
+              API unavailable — <span style={{cursor:"pointer",color:"var(--color-text-primary)",fontWeight:500,textDecoration:"underline"}} onClick={()=>imRef.current?.click()}>upload a CSV override</span> to continue
             </span>
           )}
         </div>
@@ -1275,8 +1286,8 @@ export default function App() {
               </thead>
               <tbody>
                 {effectiveRows.map((row,i)=>(
-                  <tr key={i}>
-                    <td style={{...S.td,borderBottom:i<effectiveRows.length-1?"0.5px solid var(--color-border-tertiary)":"none",position:"sticky",left:0,background:"var(--color-background-primary)",zIndex:1,textAlign:"center",color:"var(--color-text-tertiary)",fontSize:11,width:40,minWidth:40}}>{i+1}</td>
+                  <tr key={i} style={row._unmatched?{background:"rgba(251,146,60,0.1)"}:{}}>
+                    <td style={{...S.td,borderBottom:i<effectiveRows.length-1?"0.5px solid var(--color-border-tertiary)":"none",position:"sticky",left:0,background:row._unmatched?"rgba(251,146,60,0.1)":"var(--color-background-primary)",zIndex:1,textAlign:"center",color:"var(--color-text-tertiary)",fontSize:11,width:40,minWidth:40}}>{i+1}</td>
                     {allCols.map(h=>(
                       <td key={h} style={{...S.td,borderBottom:i<effectiveRows.length-1?"0.5px solid var(--color-border-tertiary)":"none",padding:0,position:"relative",...(h===divider?{borderLeft:"1.5px solid var(--color-border-secondary)"}:{})}}>
                         <div aria-hidden="true" style={{visibility:"hidden",padding:"5px 9px",fontSize:13,fontFamily:"var(--font-sans)",whiteSpace:"nowrap",lineHeight:"normal",userSelect:"none"}}>{String(row[h]??'')||' '}</div>
