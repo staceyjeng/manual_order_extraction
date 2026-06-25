@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, Fragment } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from "react";
 import JSZip from "jszip";
 
 const RETAILERS = {
@@ -180,6 +180,7 @@ export default function App() {
   const [imUpdateStatus, setImUpdateStatus] = useState('idle');
   const [imUpdateMsg, setImUpdateMsg] = useState('');
   const [imUpdateSearch, setImUpdateSearch] = useState('');
+  const [imUpdateSearchQ, setImUpdateSearchQ] = useState('');
   const [imUpdateDataSource, setImUpdateDataSource] = useState('api');
   // pdfs: { id, name, base64, status: 'loading'|'queued'|'processing'|'done'|'error', rows, unmatched, error }
   const [pdfs, setPdfs] = useState([]);
@@ -222,6 +223,17 @@ export default function App() {
   },[]);
 
   useEffect(()=>{fetchImUpdate();},[]);
+
+  useEffect(()=>{const t=setTimeout(()=>setImUpdateSearchQ(imUpdateSearch.trim()),200);return()=>clearTimeout(t);},[imUpdateSearch]);
+
+  const IM_COLS=['Internal ID','Type','Parent SKU','Parent SKU Description','Child SKU','SKU Sales Description','SKU Detailed Description','Unit Color Family','UPC Code','Case UPC','Pantone','Interior Color','Coating','Finish','Casepack Outer','Casepack Inner','Brand','Sub Brand','Licensed Property','Exclusive Customer','Factory Name','Capacity','Master Category','Product Type','Function','Sub Function','Range','Sub Range','Size Range','Size','Intro Year',"20' Container Loading","40' Container Loading","40'HQ Container Loading","45' Container Loading",'HTS Code','Unit Depth (in)','Unit Width (in)','Unit Height (in)','Unit Weight (lbs)','Gift Box','Gift Box Depth (in)','Gift Box Width (in)','Gift Box Height (in)','Gift Box Weight (lbs)','Remailer','Remailer Depth (in)','Remailer Width (in)','Remailer Height (in)','Remailer Weight (lbs)','Master Carton Depth (in)','Master Carton Width (in)','Master Carton Height (in)','Master Carton Weight (lbs)','Pallet Ti','Pallet Hi','Pallet Length (in)','Pallet Width (in)','Pallet Height (in)','Pallet Weight (lbs)','AB1200 Statement Required?','Certifications','SB Electric','Corded?','Cord Length (in)','Cord Color','Power Source','Indoor/Outdoor Use','Hertz','Volts','Watts','Materials','Item Includes','Number of Pieces In Box','Components','Prop 65 Warning Required?','Care Instructions','Max Temperature (F)','MOQ per Color','MOQ per Order','PTFE Like SKU','Duty Rate','Tariff Percentage','Manufacturing Country','Port of Export','WERCSmart ID','Warranty','IM Languages','GB Languages','KO Form Link','Artwork Dropbox Link','Copy Link','SEO Copy Link','A+ Copy Link','Video Dropbox Link','Approved Assets for Digital Marketing Link','Amazon ASIN','Target DPCI','Target TCIN','CDU','NGF','Inv Health','2023 Price','2024 Price','2025 Price','Notes'];
+
+  const imSearchHits=useMemo(()=>{
+    const q=imUpdateSearchQ.toLowerCase();
+    if(!q||!imUpdateRaw?.items?.length)return null;
+    const getVal=(row,h)=>{if(row[h]!==undefined)return String(row[h]||'');const k=Object.keys(row).find(k=>k.toLowerCase()===h.toLowerCase());return k?String(row[k]||''):'';}
+    return imUpdateRaw.items.filter(r=>IM_COLS.some(h=>{const v=getVal(r,h);return v&&v.toLowerCase().includes(q);}));
+  },[imUpdateSearchQ,imUpdateRaw]);
 
   const lookup = useCallback((items,upc,vin)=>{
     if(!items?.length) return null;
@@ -1121,7 +1133,7 @@ export default function App() {
                       <br/>
                       <span style={{color:"var(--color-text-tertiary)"}}>
                         Only{" "}
-                        download the saved search
+                        <a href="https://4848284.app.netsuite.com/app/common/search/searchresults.nl?searchid=75078&whence=" target="_blank" rel="noreferrer" style={{color:"var(--color-text-secondary)",fontWeight:500}}>download</a> the saved search
                         {" "}as a CSV and{" "}
                         <span style={{cursor:"pointer",color:"var(--color-text-secondary)",fontWeight:500,textDecoration:"underline"}} onClick={()=>imUpdateRef.current?.click()}>upload here</span>
                         {" "}as a failsafe if the API is unavailable
@@ -1157,29 +1169,28 @@ export default function App() {
           value={imUpdateSearch}
           onChange={e=>setImUpdateSearch(e.target.value)}
         />
-        {imUpdateSearch.trim()&&(()=>{
-          const q=imUpdateSearch.trim().toLowerCase();
-          const COLS=['Internal ID','Type','Parent SKU','Parent SKU Description','Child SKU','SKU Sales Description','SKU Detailed Description','Unit Color Family','UPC Code','Case UPC','Pantone','Interior Color','Coating','Finish','Casepack Outer','Casepack Inner','Brand','Sub Brand','Licensed Property','Exclusive Customer','Factory Name','Capacity','Master Category','Product Type','Function','Sub Function','Range','Sub Range','Size Range','Size','Intro Year',"20' Container Loading","40' Container Loading","40'HQ Container Loading","45' Container Loading",'HTS Code','Unit Depth (in)','Unit Width (in)','Unit Height (in)','Unit Weight (lbs)','Gift Box','Gift Box Depth (in)','Gift Box Width (in)','Gift Box Height (in)','Gift Box Weight (lbs)','Remailer','Remailer Depth (in)','Remailer Width (in)','Remailer Height (in)','Remailer Weight (lbs)','Master Carton Depth (in)','Master Carton Width (in)','Master Carton Height (in)','Master Carton Weight (lbs)','Pallet Ti','Pallet Hi','Pallet Length (in)','Pallet Width (in)','Pallet Height (in)','Pallet Weight (lbs)','AB1200 Statement Required?','Certifications','SB Electric','Corded?','Cord Length (in)','Cord Color','Power Source','Indoor/Outdoor Use','Hertz','Volts','Watts','Materials','Item Includes','Number of Pieces In Box','Components','Prop 65 Warning Required?','Care Instructions','Max Temperature (F)','MOQ per Color','MOQ per Order','PTFE Like SKU','Duty Rate','Tariff Percentage','Manufacturing Country','Port of Export','WERCSmart ID','Warranty','IM Languages','GB Languages','KO Form Link','Artwork Dropbox Link','Copy Link','SEO Copy Link','A+ Copy Link','Video Dropbox Link','Approved Assets for Digital Marketing Link','Amazon ASIN','Target DPCI','Target TCIN','CDU','NGF','Inv Health','2023 Price','2024 Price','2025 Price','Notes'];
-          const getVal=(row,h)=>{if(row[h]!==undefined)return String(row[h]||'');const k=Object.keys(row).find(k=>k.toLowerCase()===h.toLowerCase());return k?String(row[k]||''):'';}
-          const allHits=imUpdateRaw.items.filter(r=>COLS.some(h=>{const v=getVal(r,h);return v&&v.toLowerCase().includes(q);}));
-          if(!allHits.length) return <p style={{fontSize:13,color:"var(--color-text-secondary)",marginTop:8,marginBottom:0}}>No matches found.</p>;
-          return(
-            <div style={{overflow:"auto",maxHeight:400,marginTop:8,border:"1px solid var(--color-border-tertiary)",borderRadius:6}}>
-              <table style={{borderCollapse:"collapse",fontSize:12,width:"max-content",minWidth:"100%"}}>
-                <thead style={{position:"sticky",top:0,zIndex:1}}>
-                  <tr>{COLS.map(h=><th key={h} style={{padding:"4px 8px",background:"var(--color-background-secondary)",borderBottom:"1px solid var(--color-border-tertiary)",borderRight:"1px solid var(--color-border-tertiary)",textAlign:"left",whiteSpace:"nowrap"}}>{h}</th>)}</tr>
-                </thead>
-                <tbody>
-                  {allHits.map((row,i)=>(
-                    <tr key={i} style={{background:i%2===0?"":"var(--color-background-secondary)"}}>
-                      {COLS.map(h=><td key={h} style={{padding:"3px 8px",borderBottom:"1px solid var(--color-border-tertiary)",borderRight:"1px solid var(--color-border-tertiary)",whiteSpace:"nowrap"}}>{getVal(row,h)}</td>)}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          );
-        })()}
+        {imSearchHits!==null&&(imSearchHits.length===0
+          ?<p style={{fontSize:13,color:"var(--color-text-secondary)",marginTop:8,marginBottom:0}}>No matches found.</p>
+          :(()=>{
+            const getVal=(row,h)=>{if(row[h]!==undefined)return String(row[h]||'');const k=Object.keys(row).find(k=>k.toLowerCase()===h.toLowerCase());return k?String(row[k]||''):'';}
+            return(
+              <div style={{overflow:"auto",maxHeight:400,marginTop:8,border:"1px solid var(--color-border-tertiary)",borderRadius:6}}>
+                <table style={{borderCollapse:"collapse",fontSize:12,width:"max-content",minWidth:"100%"}}>
+                  <thead style={{position:"sticky",top:0,zIndex:1}}>
+                    <tr>{IM_COLS.map(h=><th key={h} style={{padding:"4px 8px",background:"var(--color-background-secondary)",borderBottom:"1px solid var(--color-border-tertiary)",borderRight:"1px solid var(--color-border-tertiary)",textAlign:"left",whiteSpace:"nowrap"}}>{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {imSearchHits.map((row,i)=>(
+                      <tr key={i} style={{background:i%2===0?"":"var(--color-background-secondary)"}}>
+                        {IM_COLS.map(h=>{const v=getVal(row,h);const isUrl=v.startsWith('http://')||v.startsWith('https://');return<td key={h} style={{padding:"3px 8px",borderBottom:"1px solid var(--color-border-tertiary)",borderRight:"1px solid var(--color-border-tertiary)",whiteSpace:"nowrap"}}>{isUrl?<a href={v} target="_blank" rel="noreferrer" style={{color:"var(--color-text-secondary)",fontWeight:500}}>Link</a>:v}</td>;})}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()
+        )}
       </div>}
 
       {/* Samples text card */}
