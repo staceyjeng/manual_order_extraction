@@ -28,7 +28,6 @@ const SHIP_METHODS = ["Collect","DPP","FedEx 2Day","FedEx Ground","FedEx Home De
 const STATUSES = ["Pending Fulfillment","Pending Approval"];
 const CSV_HEADERS = ["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo","Item","Customer Part Number","Quantity","Item Rate","Amount"];
 const SAMPLES_CSV_HEADERS = ["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo","Item","Customer Part Number","Quantity","Item Rate","Amount","Is Sample"];
-const IM_KEY = "item-master-data";
 const TABS_PREVIEW = [
   { label: "Header", cols: ["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Freight Account #","SCAC","Memo"] },
   { label: "Items", cols: ["Item","Customer Part Number","Quantity","Item Rate","Amount","Department Number"] },
@@ -177,8 +176,6 @@ export default function App() {
   const [gnbDate, setGnbDate] = useState(localISODate);
   const [gnbUpsAccount, setGnbUpsAccount] = useState("8V4012");
   const [gnbFedexAccount, setGnbFedexAccount] = useState("704499884");
-  const [im, setIm] = useState(null);
-  const [imSource, setImSource] = useState(null);
   const [imUpdateRaw, setImUpdateRaw] = useState(null);
   const [imUpdateStatus, setImUpdateStatus] = useState('idle');
   const [imUpdateMsg, setImUpdateMsg] = useState('');
@@ -196,47 +193,8 @@ export default function App() {
   const [settingsTab, setSettingsTab] = useState("main");
   const [settingsTouched, setSettingsTouched] = useState(false);
   const pdfRef = useRef();
-  const imRef = useRef();
   const imUpdateRef = useRef();
 
-  useEffect(()=>{
-    (async()=>{
-      try{
-        const nsRes=await fetch('/api/netsuite/itemmaster-restlet');
-        if(nsRes.ok){
-          const data=await nsRes.json();
-          if(!data.error&&data.items?.length){
-            const find=(row,...labels)=>{for(const l of labels){const k=Object.keys(row).find(k=>k.toLowerCase()===l.toLowerCase());if(k&&row[k])return row[k];}return '';};
-            const items=data.items.map(r=>{const c=find(r,'child sku');const p=find(r,'parent sku');return{'Child SKU':c,'Parent SKU':p,'UPC Code':find(r,'upc code'),'Case UPC':find(r,'case upc'),'Casepack Outer':find(r,'casepack outer'),'Description':find(r,'sku sales description'),'Name':p?`${p} : ${c}`:c};}).filter(r=>r['Child SKU']);
-            if(items.length){
-              setIm(items);
-              setImSource(`NetSuite · ${items.length} items`);
-              localStorage.setItem(IM_KEY,JSON.stringify({items,savedAt:new Date().toLocaleDateString()}));
-              return;
-            }
-          }
-        }
-      }catch(_){}
-      try{
-        const s=localStorage.getItem(IM_KEY);
-        if(s){const p=JSON.parse(s);if(p.items?.length){setIm(p.items);setImSource(`Cached · ${p.items.length} items · ${p.savedAt||""}`);}}
-      }catch(_){}
-    })();
-  },[]);
-
-  const loadIMCSV=useCallback((file)=>{
-    if(!file)return;
-    const reader=new FileReader();
-    reader.onload=(e)=>{
-      const parsed=parseImCsv(e.target.result);
-      const items=parsed.map(r=>({'Child SKU':r['Child SKU']||'','Parent SKU':r['Parent SKU']||'','UPC Code':r['UPC Code']||'','Casepack Outer':r['Casepack Outer']||'','Description':r['Description']||''})).filter(r=>r['Child SKU']);
-      if(!items.length){setImSource("Error: no valid items found");return;}
-      setIm(items);
-      setImSource(`CSV · ${items.length} items · cached ${new Date().toLocaleDateString()}`);
-      localStorage.setItem(IM_KEY,JSON.stringify({items,savedAt:new Date().toLocaleDateString()}));
-    };
-    reader.readAsText(file);
-  },[]);
 
   const loadImUpdateCSV = useCallback((file)=>{
     if(!file)return;
@@ -396,7 +354,7 @@ export default function App() {
         orders.forEach((order, oi) => {
           const effectiveShipDate = order.shipDate || getSamplesDefaultShipDate();
           (order.lineItems || []).forEach(line => {
-            const m = im?.length ? lookup(im, null, line.sku) : null;
+            const m = imUpdateRaw?.items?.length ? lookup(imUpdateRaw.items, null, line.sku) : null;
             const nsSku = m ? String(m["Child SKU"] || "").trim() : line.sku || "";
             const parentSku = m ? String(m["Parent SKU"] || "").trim() : line.sku || "";
             if (!m && line.sku) allUnmatched.push(line.sku);
@@ -502,7 +460,7 @@ export default function App() {
       const gnbUnmatched = [];
 
       for (const { poData, distroData, distroId } of pairs) {
-        const itemMatch = im?.length ? lookup(im, null, poData.sku) : null;
+        const itemMatch = imUpdateRaw?.items?.length ? lookup(imUpdateRaw.items, null, poData.sku) : null;
         const nsSku = itemMatch ? String(itemMatch["Child SKU"] || "").trim() : poData.sku || "";
         const parentSku = itemMatch ? String(itemMatch["Parent SKU"] || "").trim() : poData.sku || "";
         if (!itemMatch && poData.sku) gnbUnmatched.push(poData.sku);
@@ -685,7 +643,7 @@ export default function App() {
 
           if (isHyVee) {
             const upc11 = String(line.mfgNum || "").substring(0, 6) + String(line.prodNum || "").padStart(5, "0").substring(0, 5);
-            const m = im?.length ? im.find(it => String(it["UPC Code"] || "").substring(0, 11) === upc11) : null;
+            const m = imUpdateRaw?.items?.length ? imUpdateRaw.items.find(it => String(it["UPC Code"] || "").substring(0, 11) === upc11) : null;
             rowCustomerPartNum = String(line.orderCode || "");
             if (m) {
               nsSku = String(m["Child SKU"] || "").trim();
@@ -707,7 +665,7 @@ export default function App() {
             }
           } else if (isJungleJims) {
             const upc11 = String(line.upc || "").replace(/\D/g, "").substring(0, 11);
-            const m = im?.length ? im.find(it => String(it["UPC Code"] || "").replace(/\D/g, "").substring(0, 11) === upc11) : null;
+            const m = imUpdateRaw?.items?.length ? imUpdateRaw.items.find(it => String(it["UPC Code"] || "").replace(/\D/g, "").substring(0, 11) === upc11) : null;
             if (m) {
               nsSku = String(m["Child SKU"] || "").trim();
               parentSku = String(m["Parent SKU"] || "").trim();
@@ -724,7 +682,7 @@ export default function App() {
             const isMillis = String(po.shipToCity || "").toLowerCase().trim() === "millis";
             if (isMillis) {
               const rawCaseUpc = String(line.caseUpc || "").replace(/\D/g, "");
-              const m = rawCaseUpc && im?.length ? im.find(it => String(it["Case UPC"] || "").replace(/\D/g, "") === rawCaseUpc) : null;
+              const m = rawCaseUpc && imUpdateRaw?.items?.length ? imUpdateRaw.items.find(it => String(it["Case UPC"] || "").replace(/\D/g, "") === rawCaseUpc) : null;
               const sizeMfrNo = parseInt(line.sizeMfrNo) || 1;
               const costOfDisplay = Number(line.costOfDisplay) || 0;
               if (m) {
@@ -745,7 +703,7 @@ export default function App() {
               rowCustomerPartNum = String(line.itemNum || "");
             } else {
               const upc12 = String(line.gtin || "").replace(/\D/g, "").slice(-12);
-              const m = im?.length ? lookup(im, upc12, line.vendorSku) : null;
+              const m = imUpdateRaw?.items?.length ? lookup(imUpdateRaw.items, upc12, line.vendorSku) : null;
               if (m) {
                 nsSku = String(m["Child SKU"] || "").trim();
                 parentSku = String(m["Parent SKU"] || "").trim();
@@ -767,9 +725,9 @@ export default function App() {
             }
           } else if (isTjmCan) {
             const vendorStyle = String(line.vendorStyle || "").trim();
-            const m = im?.length ? (
-              im.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase()) ||
-              im.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase())
+            const m = imUpdateRaw?.items?.length ? (
+              imUpdateRaw.items.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase()) ||
+              imUpdateRaw.items.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase())
             ) : null;
             if (m) {
               nsSku = String(m["Child SKU"] || "").trim();
@@ -784,9 +742,9 @@ export default function App() {
             rowCustomerPartNum = String(line.style || "");
           } else if (isSlt) {
             const style = String(line.style || "").trim();
-            const m = im?.length ? (
-              im.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === style.toUpperCase()) ||
-              im.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === style.toUpperCase())
+            const m = imUpdateRaw?.items?.length ? (
+              imUpdateRaw.items.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === style.toUpperCase()) ||
+              imUpdateRaw.items.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === style.toUpperCase())
             ) : null;
             if (m) {
               nsSku = String(m["Child SKU"] || "").trim();
@@ -801,9 +759,9 @@ export default function App() {
             rowCustomerPartNum = line.sku ? String(parseInt(line.sku, 10)) : "";
           } else if (isMis) {
             const sku = String(line.sku || "").trim();
-            const m = im?.length ? (
-              im.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === sku.toUpperCase()) ||
-              im.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === sku.toUpperCase())
+            const m = imUpdateRaw?.items?.length ? (
+              imUpdateRaw.items.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === sku.toUpperCase()) ||
+              imUpdateRaw.items.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === sku.toUpperCase())
             ) : null;
             if (m) {
               nsSku = String(m["Child SKU"] || "").trim();
@@ -817,9 +775,9 @@ export default function App() {
             rate = Number(line.unitCost) || 0;
           } else if (isGilt) {
             const vendorSku = String(line.vendorSku || "").trim();
-            const m = im?.length ? (
-              im.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === vendorSku.toUpperCase()) ||
-              im.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === vendorSku.toUpperCase())
+            const m = imUpdateRaw?.items?.length ? (
+              imUpdateRaw.items.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === vendorSku.toUpperCase()) ||
+              imUpdateRaw.items.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === vendorSku.toUpperCase())
             ) : null;
             if (m) {
               nsSku = String(m["Child SKU"] || "").trim();
@@ -834,9 +792,9 @@ export default function App() {
             rowCustomerPartNum = String(line.rcSku || "");
           } else if (isWorldMarket) {
             const vendorStyle = String(line.vendorStyle || "").trim();
-            const m = im?.length ? (
-              im.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase()) ||
-              im.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase())
+            const m = imUpdateRaw?.items?.length ? (
+              imUpdateRaw.items.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase()) ||
+              imUpdateRaw.items.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase())
             ) : null;
             if (m) {
               nsSku = String(m["Child SKU"] || "").trim();
@@ -855,9 +813,9 @@ export default function App() {
             }
           } else if (isVerdi) {
             const childSku = String(line.childSku || "").trim();
-            const m = im?.length ? (
-              im.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === childSku.toUpperCase()) ||
-              im.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === childSku.toUpperCase())
+            const m = imUpdateRaw?.items?.length ? (
+              imUpdateRaw.items.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === childSku.toUpperCase()) ||
+              imUpdateRaw.items.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === childSku.toUpperCase())
             ) : null;
             if (m) {
               nsSku = String(m["Child SKU"] || "").trim();
@@ -871,9 +829,9 @@ export default function App() {
             rate = Number(line.unitCost) || 0;
           } else if (isPriceSmart) {
             const vendorStyle = String(line.vendorStyle || "").trim();
-            const m = im?.length ? (
-              im.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase()) ||
-              im.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase())
+            const m = imUpdateRaw?.items?.length ? (
+              imUpdateRaw.items.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase()) ||
+              imUpdateRaw.items.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase())
             ) : null;
             if (m) {
               nsSku = String(m["Child SKU"] || "").trim();
@@ -887,8 +845,8 @@ export default function App() {
             rate = Number(line.unitCost) || 0;
             rowCustomerPartNum = String(line.itemNo || "");
           } else {
-            if (im?.length) {
-              const m = lookup(im, line.upc, line.vendorItemNum);
+            if (imUpdateRaw?.items?.length) {
+              const m = lookup(imUpdateRaw.items, line.upc, line.vendorItemNum);
               if (m) {
                 nsSku = String(m["Child SKU"] || "").trim();
                 parentSku = String(m["Parent SKU"] || "").trim() || line.vendorItemNum || "";
@@ -1044,15 +1002,10 @@ export default function App() {
         <button style={S.mainTabBtn(settingsTab==="main")} onClick={()=>setSettingsTab("main")}>Order Import → Export</button>
         <div style={{flex:1}}/>
         <button
-          className={!im?.length?"im-blink":""}
-          style={{...S.mainTabBtn(settingsTab==="im"),...(!im?.length?{background:undefined,color:undefined}:{})}}
-          onClick={()=>setSettingsTab("im")}
-        >Item Master - DELETE</button>
-        <button
           className={!imUpdateRaw?.items?.length?"im-blink":""}
           style={{...S.mainTabBtn(settingsTab==="im-update"),...(!imUpdateRaw?.items?.length?{background:undefined,color:undefined}:{})}}
           onClick={()=>setSettingsTab("im-update")}
-        >Item Master UPDATE</button>
+        >Item Master</button>
       </div>
 
       {/* Order Settings */}
@@ -1141,39 +1094,7 @@ export default function App() {
         )}
       </div>}
 
-      {/* Item Master */}
-      {settingsTab==="im"&&<div style={{...S.card,padding:"0.75rem 1rem",marginBottom:"0.75rem"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-          <span style={{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:"var(--color-text-secondary)"}}>Item master</span>
-          {im?.length?(
-            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
-              <span style={{fontSize:13,color:"var(--color-text-success)",fontWeight:500}}>{imSource}</span>
-              <span style={{fontSize:12,color:"var(--color-text-secondary)",textAlign:"right"}}>
-                Item Master loads live from the NetSuite API on every refresh.<br/>
-                <span style={{color:"var(--color-text-tertiary)"}}>
-                  Only{" "}
-                  <a href="https://4848284.app.netsuite.com/app/common/search/searchresults.nl?searchid=166419&whence=" target="_blank" rel="noreferrer" style={{color:"var(--color-text-secondary)",fontWeight:500}}>download the saved search</a>
-                  {" "}as a CSV and{" "}
-                  <span style={{cursor:"pointer",color:"var(--color-text-secondary)",fontWeight:500,textDecoration:"underline"}} onClick={()=>imRef.current?.click()}>upload here</span>
-                  {" "}as a failsafe if the API is unavailable
-                </span>
-              </span>
-            </div>
-          ):imSource?(
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:13,color:"var(--color-text-danger)",fontWeight:500}}>{imSource}</span>
-              <button style={S.btnReplace} onClick={()=>imRef.current?.click()}>Try again</button>
-            </div>
-          ):(
-            <span style={{fontSize:13,color:"var(--color-text-secondary)"}}>
-              API unavailable — <span style={{cursor:"pointer",color:"var(--color-text-primary)",fontWeight:500,textDecoration:"underline"}} onClick={()=>imRef.current?.click()}>upload a CSV override</span> to continue
-            </span>
-          )}
-        </div>
-        <input ref={imRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>loadIMCSV(e.target.files[0])}/>
-      </div>}
-
-      {/* Item Master UPDATE — status */}
+      {/* Item Master — status */}
       {settingsTab==="im-update"&&<div style={{...S.card,padding:"0.75rem 1rem",marginBottom:"0.75rem"}}>
         <span style={{...S.sectionLabel,display:"block",marginBottom:8}}>Item Master Results</span>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
@@ -1195,12 +1116,12 @@ export default function App() {
                     </>
                   ):(
                     <>
-                      Fetched from customsearchitem_master.{" "}
+                      Fetched from customsearchitem_master via API.{" "}
                       <span style={{cursor:"pointer",color:"var(--color-text-secondary)",fontWeight:500,textDecoration:"underline"}} onClick={fetchImUpdate}>Refresh</span><br/>
                       <br/>
                       <span style={{color:"var(--color-text-tertiary)"}}>
                         Only{" "}
-                        <a href="https://4848284.app.netsuite.com/app/common/search/searchresults.nl?searchid=75078&whence=" target="_blank" rel="noreferrer" style={{color:"var(--color-text-secondary)",fontWeight:500}}>download the saved search</a>
+                        download the saved search
                         {" "}as a CSV and{" "}
                         <span style={{cursor:"pointer",color:"var(--color-text-secondary)",fontWeight:500,textDecoration:"underline"}} onClick={()=>imUpdateRef.current?.click()}>upload here</span>
                         {" "}as a failsafe if the API is unavailable
@@ -1226,13 +1147,13 @@ export default function App() {
         <input ref={imUpdateRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>{loadImUpdateCSV(e.target.files[0]);e.target.value='';}} />
       </div>}
 
-      {/* Item Master UPDATE — search */}
+      {/* Item Master — search */}
       {settingsTab==="im-update"&&imUpdateStatus==='done'&&imUpdateRaw&&<div style={{...S.card,padding:"0.75rem 1rem",marginBottom:"0.75rem"}}>
         <span style={{...S.sectionLabel,display:"block",marginBottom:8}}>Search item master</span>
         <input
           style={{...S.input,padding:"7px 10px",fontSize:13,width:"100%",boxSizing:"border-box"}}
           type="text"
-          placeholder="Search by Child SKU, Parent SKU, UPC, Case UPC…"
+          placeholder="Search by SKU, UPC, Name…"
           value={imUpdateSearch}
           onChange={e=>setImUpdateSearch(e.target.value)}
         />
@@ -1377,7 +1298,7 @@ export default function App() {
         {result.allCaseMismatches?.length>0&&<div style={S.msgWarn}><span><strong>⚠️ {result.allCaseMismatches.length>1?"Case Pack Mismatch Warnings":"Case Pack Mismatch Warning"}</strong><br/>{result.allCaseMismatches.map((m,i)=><span key={i}>{m}.<br/></span>)}<br/>{result.allCaseMismatches.length>1?"Contact buyer to get the POs revised to full case packs. The POs have been updated to Pending Approval pending the buyer's change.":"Contact buyer to get the PO revised to full case packs. The PO has been updated to Pending Approval pending the buyer's change."}</span></div>}
         {missingFields.length>0&&<div style={S.msgWarn}><span><strong>⚠️ {missingFields.length>1?"Missing Required Fields":"Missing Required Field"}</strong><br/>{missingFields.map((f,i)=><span key={i}>{f.label} is missing. Field is required to successfully import.<br/></span>)}</span></div>}
         {isSamplesRetailer&&result&&effectiveRows.some(r=>!hasVal(r["Addressee"])&&!hasVal(r["Attention"]))&&<div style={S.msgWarn}><i className="ti ti-alert-triangle" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/><span><strong>Missing Addressee / Attention</strong><br/>One or more orders has neither Addressee nor Attention set.</span></div>}
-        {!result.allUnmatched?.length&&im&&<div style={S.msgOk}><i className="ti ti-circle-check" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/>All items matched to item master</div>}
+        {!result.allUnmatched?.length&&imUpdateRaw?.items?.length&&<div style={S.msgOk}><i className="ti ti-circle-check" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/>All items matched to item master</div>}
         {result.failedPOs>0&&<div style={S.msgErr}><i className="ti ti-alert-circle" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/>{result.failedPOs} PDF{result.failedPOs>1?"s":""} failed — see file list above for details</div>}
 
 
