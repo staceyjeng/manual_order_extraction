@@ -1,7 +1,14 @@
 import { createHmac } from 'crypto';
 import OAuth from 'oauth-1.0a';
 
-export default async (request) => {
+export default async (request, context) => {
+  if (!context.clientContext?.user) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const restletUrl = process.env.NS_RESTLET_ITEMMASTER;
   if (!restletUrl) {
     return new Response(JSON.stringify({ error: 'NS_RESTLET_ITEMMASTER not configured', items: [] }), {

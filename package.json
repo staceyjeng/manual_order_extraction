@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "jszip": "^3.10.1",
+    "netlify-identity-widget": "^2.0.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "xlsx": "^0.18.5"

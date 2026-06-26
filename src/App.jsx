@@ -1,5 +1,6 @@
-import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from "react";
+﻿import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from "react";
 import JSZip from "jszip";
+import netlifyIdentity from 'netlify-identity-widget';
 
 const RETAILERS = {
   "BJ's Wholesale Club": { nsCustomer: "BJs Wholesale Corporate : BJs Wholesale", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No" },
@@ -10,7 +11,7 @@ const RETAILERS = {
   "Dollar General Direct Import": { nsCustomer: "Dollar General Direct Import", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultLocation: "Direct Import", dev: true },
   "Gilt": { nsCustomer: "Gilt", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultMemo: "Email inboundtrans@ruelala.com or call (502) 281-4419 for routing instructions before shipping the order" },
   "Global New Beginnings": { nsCustomer: "Global New Beginnings Inc.", shipMethod: "Collect", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", type: "gnb" },
-  "Home Hardware": { nsCustomer: "Home Hardware", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultLocation: "Direct Import", dev: true },
+  "Home Hardware": { nsCustomer: "Home Hardware", shipMethod: "Collect", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultLocation: "Direct Import" },
   "Hy-Vee": { nsCustomer: "Hy-Vee", shipMethod: "ROUTEPPD", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", orderUnit: "cases" },
   "Imperial Distributors Inc.": { nsCustomer: "Imperial Distributors Inc.", shipMethod: "ROUTEPPD", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultMemo: "Frgt Terms :$1000 Prepaid", hideCols: ["Freight Account #","SCAC"] },
   "Jungle Jims Market Inc": { nsCustomer: "Jungle Jims Market Inc", shipMethod: "UPS Ground", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultMemo: "Packing slip or invoice must be on the outside of the package, with the department specified. Jungle Jim's does not accept shipments from UPS freight. UPS Ground is Fine.", hideCols: ["Customer Part Number","Freight Account #","SCAC"], showCols: {"Items": ["Department Number"]} },
@@ -20,14 +21,24 @@ const RETAILERS = {
   "Sur La Table": { nsCustomer: "Sur La Table", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultMemo: "Remove MABD from BOL to avoid chargeback" },
   "TJ Maxx Canada": { nsCustomer: "T.J. Maxx Corporate : T.J. Maxx - Canada", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No" },
   "Verdi Commerce LLC": { nsCustomer: "Verdi Commerce LLC", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultMemo: "Please use the the will call form" },
-  "Walmart Canada": { nsCustomer: "Walmart Canada", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultLocation: "Direct Import", dev: true },
+  "Walmart Canada": { nsCustomer: "Walmart Canada", shipMethod: "Collect", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultLocation: "Direct Import" },
+  "Walmart DI - US": { nsCustomer: "Walmart Corporate : Walmart US DI", shipMethod: "Collect", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultLocation: "Direct Import" },
   "Walmart Marketplace": { nsCustomer: "Walmart Corporate : Walmart Marketplace", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", dev: true },
-  "Walmart US DI": { nsCustomer: "Walmart US DI", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultLocation: "Direct Import", dev: true },
 };
 const SHIP_METHODS = ["Collect","DPP","FedEx 2Day","FedEx Ground","FedEx Home Delivery","FedEx International Econ","FedEx SmartPost","Fedex Standard Overnight","Route","ROUTEPPD","UPS 2-Day","UPS 3-Day","UPS Express Saver","UPS Ground","UPS Overnight","UPS Surepost","USPS","USPS Ground Advantage"];
 const STATUSES = ["Pending Fulfillment","Pending Approval"];
 const CSV_HEADERS = ["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo","Item","Customer Part Number","Quantity","Item Rate","Amount"];
 const SAMPLES_CSV_HEADERS = ["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo","Item","Customer Part Number","Quantity","Item Rate","Amount","Is Sample"];
+const DEFAULT_ADDRESS_BOOK = [
+  {name:"Caitlin Wise",     attention:"",               addr1:"2277 W. Cedar Hills Dr.",    addr2:"",            city:"Cedar City",    state:"UT", zip:"84720", country:"US"},
+  {name:"Clay Elder",       attention:"",               addr1:"894 Riverside Dr",          addr2:"Apt 2E",      city:"New York City", state:"NY", zip:"10032", country:"US"},
+  {name:"Cory Ellis",       attention:"",               addr1:"14819 NW Jewell Ln",        addr2:"",            city:"Portland",      state:"OR", zip:"97229", country:"US"},
+  {name:"Imperial Distributors", attention:"Erica Buonanno", addr1:"150 Blackstone River Road", addr2:"",      city:"Worcester",     state:"MA", zip:"01607", country:"US"},
+  {name:"Storebound",       attention:"",               addr1:"50 Broad St",               addr2:"12th Floor",  city:"New York City", state:"NY", zip:"10004", country:"US"},
+];
+const AB_KEY = "sb-address-book";
+const toTitleCase = s => s ? s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) : s;
+
 const TABS_PREVIEW = [
   { label: "Header", cols: ["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Freight Account #","SCAC","Memo"] },
   { label: "Items", cols: ["Item","Customer Part Number","Quantity","Item Rate","Amount","Department Number"] },
@@ -47,13 +58,21 @@ function esc(v){if(v===null||v===undefined)return "";const s=String(v);return(s.
 function hasVal(v){return v!=null&&String(v).trim()!=="";}
 function buildFilteredCSV(headers,rows){const active=headers.filter(h=>rows.some(r=>hasVal(r[h])));return[active.join(","),...rows.map(r=>active.map(h=>esc(r[h])).join(","))].join("\n");}
 function buildCSV(rows){return buildFilteredCSV(CSV_HEADERS,rows);}
-function buildSamplesCSV(rows){return buildFilteredCSV(SAMPLES_CSV_HEADERS,rows);}
+const SAMPLES_ADDR_COLS=new Set(["Addressee","Attention","Address 1","Address 2","City","State","Zip","Country"]);
+function buildSamplesCSV(rows){const active=SAMPLES_CSV_HEADERS.filter(h=>SAMPLES_ADDR_COLS.has(h)||rows.some(r=>hasVal(r[h])));return[active.join(","),...rows.map(r=>active.map(h=>esc(r[h])).join(","))].join("\n");}
 const GNB_CSV_HEADERS=["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Freight Account #","SCAC","Memo","Item","Customer Part Number","Quantity","Item Rate","Amount"];
 function buildGnbCSV(rows){return buildFilteredCSV(GNB_CSV_HEADERS,rows);}
 const IMPERIAL_CSV_HEADERS=["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo","Item","Customer Part Number","Quantity","Item Rate","Amount"];
 function buildImperialCSV(rows){return buildFilteredCSV(IMPERIAL_CSV_HEADERS,rows);}
 const JJ_CSV_HEADERS=["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo","Item","Quantity","Item Rate","Amount","Department Number"];
 function buildJjCSV(rows){return buildFilteredCSV(JJ_CSV_HEADERS,rows);}
+const WAL_CAN_CSV_HEADERS=["Date","PO Number","Customer","Status","Item","Customer Part Number","Quantity","Item Rate","Amount","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo"];
+function buildWalmartCanCSV(rows){return buildFilteredCSV(WAL_CAN_CSV_HEADERS,rows);}
+const WAL_DI_PROMPT=`Extract ALL destinations from this Walmart Direct Import purchase order document. Return ONLY valid JSON, no markdown, no explanation.\n\n{"orders":[{"poNumber":"","orderDate":"YYYY-MM-DD","shipDate":"YYYY-MM-DD","cancelDate":"YYYY-MM-DD","addressee":"","quoteId":"","eventCode":"","inStoreDate":"YYYY-MM-DD","loadingPort":"","lineItems":[{"vendorStyle":"","quantity":0,"unitCost":0.00,"packQty":0}]}]}\n\nRules:\n- Return one entry per destination row.\n- poNumber=Purchase Order number (e.g. 1006764461).\n- orderDate=Create Date in YYYY-MM-DD.\n- shipDate=Vendor Ship Date (first date on the destination row) in YYYY-MM-DD.\n- cancelDate=Cancel Date (second date on the destination row, one line below ship date) in YYYY-MM-DD.\n- addressee=Destination name exactly as printed (e.g. RIDGEVILLE SC FLOW).\n- quoteId=Number from the "QUOTE COPIED FROM TEMPLATE:" line in the Notes/Misc comments section (digits only, e.g. 21321671); empty string if not found.\n- eventCode=Event code from Event(Date): field (e.g. OLHOLIWK35), without parentheses/date; empty string if not found.\n- inStoreDate=In Store Date in YYYY-MM-DD; empty string if not found.\n- loadingPort=Loading Port / Place of Possession; empty string if not found.\n- lineItems: vendorStyle=Vendor Stock number (e.g. DAFT230002). quantity=Total Cartons per Line as integer. unitCost=NET FIRST COST decimal value. packQty=Pack #: value as integer; 1 if not found.\n- Extract ALL line items per destination.\n- ONLY JSON.`;
+const WAL_DI_CSV_HEADERS=["Date","PO Number","Customer","Status","Item","Customer Part Number","Quantity","Item Rate","Amount","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo","Location"];
+function buildWalmartDiCSV(rows){return buildFilteredCSV(WAL_DI_CSV_HEADERS,rows);}
+const HH_CSV_HEADERS=["Date","PO Number","Customer","Status","Item","Customer Part Number","Quantity","Item Rate","Amount","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo","Location"];
+function buildHhCSV(rows){return buildFilteredCSV(HH_CSV_HEADERS,rows);}
 const TJM_CAN_CSV_HEADERS=["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo","Item","Customer Part Number","Quantity","Item Rate","Amount","Department Number"];
 function buildTjmCanCSV(rows){return buildFilteredCSV(TJM_CAN_CSV_HEADERS,rows);}
 function buildCpnCSV(rows){const seen=new Set();const lines=[["Customer","Item","Name"]];for(const r of rows){const cpn=String(r["Customer Part Number"]||"").trim();const childSku=String(r["NS SKU"]||"").trim();const parentSku=String(r["Parent SKU"]||"").trim();if(!cpn||!childSku)continue;const item=parentSku?`${parentSku} : ${childSku}`:childSku;const customer=String(r["Customer"]||"").trim();const key=`${customer}|${item}|${cpn}`;if(seen.has(key))continue;seen.add(key);lines.push([customer,item,cpn]);}return lines.map(row=>row.map(v=>esc(v)).join(",")).join("\n");}
@@ -80,6 +99,7 @@ function friendlyError(e) {
 }
 function dlCSV(content,name){const b=new Blob(["﻿"+content],{type:"text/csv;charset=utf-8;"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
 function isoToMDY(iso){if(!iso)return "";const[y,m,d]=iso.split("-");return `${parseInt(m)}/${parseInt(d)}/${y}`;}
+function mddFormat(mdy){if(!mdy)return "";const p=mdy.split("/");if(p.length<2)return "";const mn=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return `${parseInt(p[1])}-${mn[parseInt(p[0])-1]||""}`; }
 function localISODate(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function addDays(ds,n){if(!ds)return "";const[m,d,y]=ds.split("/").map(Number);const dt=new Date(y,m-1,d);dt.setDate(dt.getDate()+n);return `${String(dt.getMonth()+1).padStart(2,"0")}/${String(dt.getDate()).padStart(2,"0")}/${dt.getFullYear()}`;}
 function subBizDays(ds,n){if(!ds)return "";const[m,d,y]=ds.split("/").map(Number);const dt=new Date(y,m-1,d);let rem=n;while(rem>0){dt.setDate(dt.getDate()-1);const dow=dt.getDay();if(dow!==0&&dow!==6)rem--;}return `${String(dt.getMonth()+1).padStart(2,"0")}/${String(dt.getDate()).padStart(2,"0")}/${dt.getFullYear()}`;}
@@ -87,7 +107,7 @@ function addBizDays(ds,n){if(!ds)return "";const[m,d,y]=ds.split("/").map(Number
 function isoAddBizDays(iso,n){if(!iso)return "";const mdy=isoToMDY(iso);const r=addBizDays(mdy,n);const[rm,rd,ry]=r.split("/");return `${ry}-${rm}-${rd}`;}
 const UPS_GROUND_TRANSIT={"NV":2,"AZ":2,"OR":2,"WA":2,"ID":3,"UT":3,"MT":3,"WY":3,"CO":3,"NM":3,"ND":4,"SD":4,"NE":4,"KS":4,"MN":4,"IA":4,"MO":4,"WI":4,"IL":4,"MI":4,"IN":4,"OH":4,"KY":4,"TN":4,"AR":4,"OK":4,"LA":5,"MS":5,"AL":5,"GA":5,"FL":5,"SC":5,"NC":5,"VA":5,"WV":5,"MD":5,"DE":5,"NJ":5,"NY":5,"PA":5,"CT":5,"RI":5,"MA":5,"NH":5,"VT":5,"ME":5,"DC":5,"PR":6,"VI":6,"GU":6};
 function upsGroundDays(zip,state){const z=parseInt((zip||"").replace(/\D/g,"").slice(0,3)||"0");if(state==="CA"||(!state&&z>=900&&z<=961)){return z>=933?2:1;}if(state==="TX"||(!state&&z>=750&&z<=799)){return z>=780?5:4;}return UPS_GROUND_TRANSIT[state]||5;}
-function genSamplePOBase(attn,company,yymmdd){const src=(attn||"").trim();if(src){const words=src.split(/\s+/).filter(Boolean);const initial=words[0]?words[0][0].toUpperCase():"";const raw=words.length>1?words[words.length-1]:words[0]||"";const last=raw.replace(/[^a-zA-Z]/g,"");return `${initial}${last.charAt(0).toUpperCase()+last.slice(1)}Sample${yymmdd}`;}const co=(company||"").replace(/[^a-zA-Z0-9]/g,"").slice(0,12);return `${co}Sample${yymmdd}`;}
+function genSamplePOBase(attn,company,yymmdd){const src=(attn||"").trim();if(src){const words=src.split(/\s+/).filter(Boolean);if(words.length>1){const initial=words[0][0].toUpperCase();const last=words[words.length-1].replace(/[^a-zA-Z]/g,"");return `${initial}${last.charAt(0).toUpperCase()+last.slice(1)}Sample${yymmdd}`;}const name=words[0].replace(/[^a-zA-Z]/g,"");return `${name.charAt(0).toUpperCase()+name.slice(1)}Sample${yymmdd}`;}const co=(company||"").replace(/[^a-zA-Z0-9]/g,"").slice(0,12);return `${co}Sample${yymmdd}`;}
 function getSamplesDefaultShipDate(){const now=new Date();const est=new Date(now.toLocaleString("en-US",{timeZone:"America/New_York"}));const day=est.getDay(),h=est.getHours(),m=est.getMinutes();const isWeekday=day!==0&&day!==6;const pastCutoff=h>14||(h===14&&m>=30);const base=`${String(est.getMonth()+1).padStart(2,"0")}/${String(est.getDate()).padStart(2,"0")}/${est.getFullYear()}`;return(isWeekday&&!pastCutoff)?base:addBizDays(base,1);}
 const SAMPLES_PO_KEY="sbops_sample_po";
 function allocSamplePO(base){const today=localISODate().replace(/-/g,"").slice(2);let t={date:"",used:{}};try{t=JSON.parse(localStorage.getItem(SAMPLES_PO_KEY)||"{}");}catch{}if(t.date!==today)t={date:today,used:{}};t.used[base]=(t.used[base]||0)+1;const n=t.used[base];localStorage.setItem(SAMPLES_PO_KEY,JSON.stringify(t));return n===1?base:`${base}-${n}`;}
@@ -104,8 +124,11 @@ const SAMPLES_PROMPT=`Parse this sample request message from an employee. It may
 
 const GNB_PROMPT=`This is a Global New Beginnings (GNBI) document. Identify its type and extract accordingly. Return ONLY valid JSON, no markdown, no explanation.\n\nIf this is a PURCHASE ORDER (has "PURCHASE ORDER" heading, a PO # field, and SKU line items with unit cost):\n{"docType":"po","poNumber":"number only e.g. 3320","orderDate":"MM/DD/YYYY","shipDate":"MM/DD/YYYY","sku":"exact SKU string e.g. RSMS150GBRR24","unitCost":0.0000}\n\nIf this is a DISTRIBUTION SHEET (table of fulfillment center rows with a Quill P.O. # column and ship-to addresses):\n{"docType":"distro","gnbiPoNumber":"","itemNum":"Item # value e.g. RSMS150GBRR24","quillSkuNum":"Quill SKU # value e.g. 3171196","primaryShipDate":"MM/DD/YYYY","locations":[{"quillPoNum":"e.g. XSYI66-1","name":"full center name e.g. Quill Fulfillment Center #472","address1":"street address line 1","address2":"street address line 2 if present else empty","city":"","state":"2-letter","zip":"","country":"US","quantity":0,"shipMethod":"exact carrier name as shown on the sheet e.g. Fed Ex Ground, UPS Ground, T-Force, Roadrunner","scac":"SCAC code(s) exactly as shown e.g. RDFS or UPGF/TFIN; empty string if not shown","shipDate":"MM/DD/YYYY"}]}\n\nDistro rules: exclude rows where quantity=0. shipMethod=the exact carrier name from the sheet — do NOT normalize or replace unknown carriers with Fed Ex Ground or UPS Ground. scac=the raw SCAC string as printed (may contain slashes for multiple codes); empty string if absent. shipDate=the "Latest Acceptable Ship Date" for that row; if blank use primaryShipDate. ONLY JSON.`;
 
-const SLT_PROMPT=`Extract data from this Sur La Table purchase order PDF. Return ONLY valid JSON, no markdown, no explanation.\n\n{"poNumber":"","orderDate":"YYYY-MM-DD","shipDate":"YYYY-MM-DD","shipToName":"","shipToAttention":"","shipToAddress1":"","shipToAddress2":"","shipToCity":"","shipToState":"2-letter","shipToZip":"","shipToCountry":"","lineItems":[{"style":"","sku":"","quantity":0,"unitCost":0.00}]}\n\nRules:\n- poNumber=PURCHASE ORDER number exactly as printed (with leading zeros, e.g. 0001688975).\n- orderDate=ORDER DATE in YYYY-MM-DD.\n- shipDate=BEGIN SHIP DATE in YYYY-MM-DD.\n- Ship-to block: first line=shipToName, second line=shipToAttention (e.g. EAGLEPOINT BUSINESS PARK), remaining lines=street address.\n- shipToAddress1=street address line (e.g. 901 E NORTHFIELD DR). If the street line contains a unit/suite/# (e.g. #200), split it: street goes in shipToAddress1, unit goes in shipToAddress2.\n- shipToAddress2=unit, suite, or # portion of the street address; empty string if none.\n- shipToState=2-letter abbreviation. shipToCountry=full country name as printed.\n- lineItems: style=STYLE column value (e.g. DEC012WH). sku=SKU column value exactly as printed with leading zeros (e.g. 0008975526). quantity=QTY integer. unitCost=COST decimal.\n- Extract ALL line items.\n- ONLY JSON.`;
+const SLT_PROMPT=`Extract data from this Sur La Table purchase order PDF. Return ONLY valid JSON, no markdown, no explanation.\n\n{"poNumber":"","orderDate":"YYYY-MM-DD","shipDate":"YYYY-MM-DD","shipToName":"","shipToAttention":"","shipToAddress1":"","shipToAddress2":"","shipToCity":"","shipToState":"2-letter","shipToZip":"","shipToCountry":"","lineItems":[{"style":"","sku":"","quantity":0,"unitCost":0.00,"shipPackQty":0}]}\n\nRules:\n- poNumber=PURCHASE ORDER number exactly as printed (with leading zeros, e.g. 0001688975).\n- orderDate=ORDER DATE in YYYY-MM-DD.\n- shipDate=BEGIN SHIP DATE in YYYY-MM-DD.\n- Ship-to block: first line=shipToName, second line=shipToAttention (e.g. EAGLEPOINT BUSINESS PARK), remaining lines=street address.\n- shipToAddress1=street address line (e.g. 901 E NORTHFIELD DR). If the street line contains a unit/suite/# (e.g. #200), split it: street goes in shipToAddress1, unit goes in shipToAddress2.\n- shipToAddress2=unit, suite, or # portion of the street address; empty string if none.\n- shipToState=2-letter abbreviation. shipToCountry=full country name as printed.\n- lineItems: style=STYLE column value (e.g. DEC012WH). sku=SKU column value exactly as printed with leading zeros (e.g. 0008975526). quantity=QTY integer. unitCost=COST decimal. shipPackQty=MIN PACK column value as integer; 0 if not present.\n- Extract ALL line items.\n- ONLY JSON.`;
 
+const WAL_CAN_PROMPT=`Extract ALL purchase orders from this PDF. There may be one or more POs. Return ONLY valid JSON, no markdown, no explanation.\n\n{"orders":[{"poNumber":"","orderDate":"YYYY-MM-DD","shipDate":"YYYY-MM-DD","cancelDate":"YYYY-MM-DD","mabd":"YYYY-MM-DD","addressee":"","quoteNumber":"","lineItems":[{"vendorStyle":"","quantity":0,"unitCost":0.00,"shipPackQty":0}]}]}\n\nRules:\n- Return one entry in "orders" per distinct Purchase Order found in the PDF.\n- poNumber=Purchase Order number exactly as printed (with leading zeros, e.g. 0004314907).\n- orderDate=Order date / PO date in YYYY-MM-DD.\n- shipDate=Start Ship Date / Ship Window Start / Not Before Date in YYYY-MM-DD.\n- cancelDate=Cancel Date / Ship Window End / Not After Date / Ship Not After in YYYY-MM-DD; empty string if not found.\n- mabd=Must Arrive By / Arrival Date / Requested Delivery Date / Arrive No Later Than in YYYY-MM-DD.\n- addressee=Ship-to company name exactly as printed (e.g. WAL-MART IMD CANADA).\n- quoteNumber=Quote number or template number referenced in the PO (digits only, e.g. 20135648); empty string if not present.\n- lineItems: vendorStyle=vendor item number/style as printed. quantity=ordered quantity as integer. unitCost=unit cost/price as decimal. shipPackQty=Quantity Per Pack value as integer; 0 if not present.\n- Extract ALL line items for each PO.\n- ONLY JSON.`;
+const HH_PROMPT=`Extract data from this Home Hardware purchase order PDF. Return ONLY valid JSON, no markdown, no explanation.\n\n{"poNumber":"","orderDate":"MM/DD/YYYY","shipDate":"MM/DD/YYYY","lineItems":[{"vendorStyle":"","hhNbr":"","quantity":0,"unitCost":0.00}]}\n\nRules:\n- poNumber=Purchase Order Number (e.g. X604S07962).\n- orderDate=Date Issued in MM/DD/YYYY (e.g. 2026/04/17 → 4/17/2026).\n- shipDate=Ship Date in MM/DD/YYYY (e.g. 2026/06/25 → 6/25/2026).\n- lineItems: vendorStyle=vendor style/SKU (e.g. DAPP150V2CA04). hhNbr=HH Nbr column value (e.g. 3813-078). quantity=Quantity integer. unitCost=Unit Cost decimal.\n- Extract ALL line items.\n- ONLY JSON.`;
+const WAL_CAN_RTF_PROMPT=`Extract ALL purchase orders from this Walmart Canada Retail Link RTF document. Return ONLY valid JSON, no markdown, no explanation.\n\n{"orders":[{"poNumber":"","orderDate":"YYYY-MM-DD","shipDate":"YYYY-MM-DD","cancelDate":"YYYY-MM-DD","addressee":"","quoteId":"","lineItems":[{"vendorStyle":"","quantity":0,"unitCost":0.00,"packQty":0}]}]}\n\nRules:\n- Return one entry per Purchase Order found.\n- poNumber=Purchase Order number exactly as printed (with leading zeros, e.g. 0004314907).\n- orderDate=Create Date in YYYY-MM-DD.\n- shipDate=Vendor Ship Date (first date on the DESTINATION row) in YYYY-MM-DD.\n- cancelDate=Cancel Date (second date on the DESTINATION row, one line below ship date) in YYYY-MM-DD.\n- addressee=Destination name exactly as printed (e.g. VIDC WEST).\n- quoteId=Number from "QUOTE COPIED FROM TEMPLATE:" in Misc comments (digits only, e.g. 20135648); empty string if not found.\n- lineItems: vendorStyle=Vendor Stock number exactly as printed (e.g. DMIC100GBCA02). quantity=QUANTITY (EA.) value as integer (NOT cartons). unitCost=FIRST COST USD decimal (NOT Net First Cost). packQty=Pack #: value as integer; 1 if not found.\n- Extract ALL line items per PO.\n- ONLY JSON.`;
 const VERDI_PROMPT=`Extract data from this Verdi Commerce purchase order PDF. Return ONLY valid JSON, no markdown, no explanation.\n\n{"poNumber":"","orderDate":"MM/DD/YYYY","shipDate":"MM/DD/YYYY","shipToName":"","shipToAttention":"","shipToAddress1":"","shipToAddress2":"","shipToCity":"","shipToState":"2-letter","shipToZip":"","shipToCountry":"full country name e.g. United States","lineItems":[{"childSku":"","quantity":0,"unitCost":0.00}]}\n\nRules:\n- poNumber=PO # field.\n- orderDate=Date field in MM/DD/YYYY.\n- shipDate=Ship Date field in MM/DD/YYYY.\n- Ship To block: first line=shipToName (e.g. "PO 4911817-99"), second line=shipToAttention (company name, e.g. "Theisen Supply Inc"), third line=shipToAddress1 (street address). shipToAddress2="" if not present.\n- shipToCountry=full country name (United States, not US).\n- lineItems: childSku=Item column value with all spaces and line breaks removed (e.g. "DEG200GBB K01" or "DEG200GBB\\nK01" → "DEG200GBBK01"). quantity=Quantity integer. unitCost=Rate decimal.\n- Extract ALL line items.\n- ONLY JSON.`;
 
 const PRICESMART_PROMPT=`Extract data from this PriceSmart Inc. purchase order PDF. Return ONLY valid JSON, no markdown, no explanation.\n\n{"poNumber":"","orderDate":"MM/DD/YY","shipDate":"MM/DD/YY","revisedDate":"MM/DD/YY","deliveryDate":"MM/DD/YY","shipToName":"","shipToAddress1":"","shipToAddress2":"","shipToCity":"","shipToState":"","shipToZip":"","shipToCountry":"full country name e.g. China","memo":"","lineItems":[{"itemNo":"","vendorStyle":"","quantity":0,"unitCost":0.00}]}\n\nRules:\n- poNumber=P.O NUMBER field.\n- orderDate=ORDER DATE in MM/DD/YY.\n- shipDate=SHIP DATE or SHIP NOT BEFORE in MM/DD/YY if explicitly on PO, else "".\n- revisedDate=REVISED DATE in MM/DD/YY (used as cancel date). If absent, use SHIP NOT AFTER.\n- deliveryDate=DELIVERY DATE in MM/DD/YY if present, else "".\n- Ship To block: shipToName=first line (e.g. "APL Logistics o/b PriceSmart, Inc. 2094"). shipToAddress1=first street/building line. shipToAddress2=second address line if present (e.g. park or district). shipToState="" if not present. shipToCountry=full name (CN → China, US → United States).\n- memo=full text of the notes/remarks block (the "!! SHIP TO DC..." section), preserving newlines as \\n.\n- lineItems: itemNo=ITEM NO. column integer as string. vendorStyle=the Dash product style code in the DESCRIPTION (e.g. "DSSP50008-D" — a code like letters+numbers+optional hyphen+letter, may be on a continuation line). quantity=ORDERED integer. unitCost=UNIT COST decimal.\n- Extract ALL line items.\n- ONLY JSON.`;
@@ -168,11 +191,16 @@ export default function App() {
   const [shipMethod, setShipMethod] = useState("Route");
   const [orderStatus, setOrderStatus] = useState("Pending Fulfillment");
   const [memo, setMemo] = useState("");
+  const [addressBook, setAddressBook] = useState(()=>{try{const s=localStorage.getItem(AB_KEY);if(s)return JSON.parse(s).sort((a,b)=>a.name.localeCompare(b.name));}catch(_){}return DEFAULT_ADDRESS_BOOK;});
+  const [addrBookSel, setAddrBookSel] = useState('');
+  const [addrBookOpen, setAddrBookOpen] = useState(false);
+  const addrBookRef = useRef();
   const [samplesSubcustomer, setSamplesSubcustomer] = useState("");
   const [samplesText, setSamplesText] = useState("");
   const [samplesShipDate, setSamplesShipDate] = useState("");
   const [samplesCancelDate, setSamplesCancelDate] = useState("");
   const [samplesMabd, setSamplesMabd] = useState("");
+  const [groundWarnDismissedFor, setGroundWarnDismissedFor] = useState(null);
   const [gnbDate, setGnbDate] = useState(localISODate);
   const [gnbUpsAccount, setGnbUpsAccount] = useState("8V4012");
   const [gnbFedexAccount, setGnbFedexAccount] = useState("704499884");
@@ -211,11 +239,21 @@ export default function App() {
     reader.readAsText(file);
   },[]);
 
+  const [authUser, setAuthUser] = useState(()=>import.meta.env.DEV ? true : netlifyIdentity.currentUser());
+  useEffect(()=>{
+    if(import.meta.env.DEV) return;
+    netlifyIdentity.on('login', u=>{setAuthUser(u); netlifyIdentity.close();});
+    netlifyIdentity.on('logout', ()=>setAuthUser(null));
+    return()=>{netlifyIdentity.off('login');netlifyIdentity.off('logout');};
+  },[]);
+
   const fetchImUpdate = useCallback(async()=>{
     setImUpdateStatus('loading');
     setImUpdateMsg('');
     try{
-      const res=await fetch('/api/netsuite/itemmaster-restlet?searchId=customsearchitem_master');
+      const headers={};
+      if(!import.meta.env.DEV){const token=netlifyIdentity.currentUser()?.token?.access_token;if(token)headers['Authorization']=`Bearer ${token}`;}
+      const res=await fetch('/api/netsuite/itemmaster-restlet?searchId=customsearchitem_master',{headers});
       const data=await res.json();
       if(data.error){setImUpdateStatus('error');setImUpdateMsg(data.error);}
       else{setImUpdateRaw(data);setImUpdateStatus('done');setImUpdateDataSource('api');}
@@ -225,6 +263,7 @@ export default function App() {
   useEffect(()=>{fetchImUpdate();},[]);
 
   useEffect(()=>{const t=setTimeout(()=>setImUpdateSearchQ(imUpdateSearch.trim()),200);return()=>clearTimeout(t);},[imUpdateSearch]);
+  useEffect(()=>{const h=e=>{if(addrBookRef.current&&!addrBookRef.current.contains(e.target))setAddrBookOpen(false);};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h);},[]);
 
   const IM_COLS=['Internal ID','Type','Parent SKU','Parent SKU Description','Child SKU','SKU Sales Description','SKU Detailed Description','Unit Color Family','UPC Code','Case UPC','Pantone','Interior Color','Coating','Finish','Casepack Outer','Casepack Inner','Brand','Sub Brand','Licensed Property','Exclusive Customer','Factory Name','Capacity','Master Category','Product Type','Function','Sub Function','Range','Sub Range','Size Range','Size','Intro Year',"20' Container Loading","40' Container Loading","40'HQ Container Loading","45' Container Loading",'HTS Code','Unit Depth (in)','Unit Width (in)','Unit Height (in)','Unit Weight (lbs)','Gift Box','Gift Box Depth (in)','Gift Box Width (in)','Gift Box Height (in)','Gift Box Weight (lbs)','Remailer','Remailer Depth (in)','Remailer Width (in)','Remailer Height (in)','Remailer Weight (lbs)','Master Carton Depth (in)','Master Carton Width (in)','Master Carton Height (in)','Master Carton Weight (lbs)','Pallet Ti','Pallet Hi','Pallet Length (in)','Pallet Width (in)','Pallet Height (in)','Pallet Weight (lbs)','AB1200 Statement Required?','Certifications','SB Electric','Corded?','Cord Length (in)','Cord Color','Power Source','Indoor/Outdoor Use','Hertz','Volts','Watts','Materials','Item Includes','Number of Pieces In Box','Components','Prop 65 Warning Required?','Care Instructions','Max Temperature (F)','MOQ per Color','MOQ per Order','PTFE Like SKU','Duty Rate','Tariff Percentage','Manufacturing Country','Port of Export','WERCSmart ID','Warranty','IM Languages','GB Languages','KO Form Link','Artwork Dropbox Link','Copy Link','SEO Copy Link','A+ Copy Link','Video Dropbox Link','Approved Assets for Digital Marketing Link','Amazon ASIN','Target DPCI','Target TCIN','CDU','NGF','Inv Health','2023 Price','2024 Price','2025 Price','Notes'];
 
@@ -255,13 +294,14 @@ export default function App() {
 
   const addPDFs = (files) => {
     if (!files?.length) return;
-    const fileArr = Array.from(files).filter(f => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
+    const fileArr = Array.from(files).filter(f => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf") || f.name.toLowerCase().endsWith(".rtf"));
     if (!fileArr.length) return;
     const ts = Date.now();
     const newEntries = fileArr.map((file, idx) => ({
       id: `${ts}-${idx}`,
       name: file.name,
       base64: null,
+      rtfText: null,
       status: "loading",
       rows: [],
       unmatched: [],
@@ -271,17 +311,24 @@ export default function App() {
     fileArr.forEach((file, idx) => {
       const r = new FileReader();
       const id = newEntries[idx].id;
-      r.onload = ev => {
-        const base64 = ev.target.result.split(",")[1];
-        setPdfs(prev => prev.map(p => p.id === id ? { ...p, base64, status: "queued" } : p));
-      };
-      r.readAsDataURL(file);
+      if (file.name.toLowerCase().endsWith(".rtf")) {
+        r.onload = ev => {
+          setPdfs(prev => prev.map(p => p.id === id ? { ...p, rtfText: ev.target.result, status: "queued" } : p));
+        };
+        r.readAsText(file);
+      } else {
+        r.onload = ev => {
+          const base64 = ev.target.result.split(",")[1];
+          setPdfs(prev => prev.map(p => p.id === id ? { ...p, base64, status: "queued" } : p));
+        };
+        r.readAsDataURL(file);
+      }
     });
   };
 
   const handleFiles = async (files) => {
     const fileArr = Array.from(files);
-    const pdfs = fileArr.filter(f => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf"));
+    const pdfs = fileArr.filter(f => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf") || f.name.toLowerCase().endsWith(".rtf"));
     const zips = fileArr.filter(f => f.type === "application/zip" || f.name.toLowerCase().endsWith(".zip"));
     for (const zip of zips) {
       try {
@@ -332,7 +379,7 @@ export default function App() {
   const resetAll = () => {
     const saved=retailerOverrides[retailer];const rc=RETAILERS[retailer]||{};
     const defaultMemo=retailer==="Samples"?(rc.defaultMemo||""):(saved?.memo!==undefined?saved.memo:(rc.defaultMemo||""));
-    setPdfs([]); setResult(null); setRows([]); setRowOverrides([]); setErr(""); setBusy(false); setBusyMsg(""); setMemo(defaultMemo); setGnbDate(localISODate()); setGnbUpsAccount("8V4012"); setGnbFedexAccount("704499884"); setSamplesSubcustomer(""); setSamplesText(""); setSamplesShipDate(""); setSamplesCancelDate(""); setSamplesMabd(""); setSettingsTouched(false);
+    setPdfs([]); setResult(null); setRows([]); setRowOverrides([]); setErr(""); setBusy(false); setBusyMsg(""); setMemo(defaultMemo); setGnbDate(localISODate()); setGnbUpsAccount("8V4012"); setGnbFedexAccount("704499884"); setSamplesSubcustomer(""); setSamplesText(""); setSamplesShipDate(""); setSamplesCancelDate(""); setSamplesMabd(""); setSettingsTouched(false); setAddrBookSel('');
     if (pdfRef.current) pdfRef.current.value = "";
   };
 
@@ -392,6 +439,16 @@ export default function App() {
         });
         setRows(samplesRows);
         setResult({ totalPOs: orders.length, failedPOs: 0, allUnmatched, allCaseMismatches: [] });
+        if (addrBookSel === '' && orders.length > 0) {
+          const parsedName = (orders[0].shipToName || '').toLowerCase().trim();
+          if (parsedName) {
+            const matchIdx = addressBook.findIndex(e => {
+              const en = e.name.toLowerCase();
+              return parsedName.includes(en) || en.includes(parsedName);
+            });
+            if (matchIdx !== -1) setAddrBookSel(String(matchIdx));
+          }
+        }
       } catch(e) {
         setErr(friendlyError(e));
       }
@@ -399,7 +456,7 @@ export default function App() {
       return;
     }
 
-    const queued = pdfs.filter(p => p.status === "queued" && p.base64);
+    const queued = pdfs.filter(p => p.status === "queued" && (p.base64 || p.rtfText));
     if (!queued.length) { setErr("No PDFs ready to process."); setBusy(false); return; }
 
     // Track changes locally to avoid stale-closure issues across async iterations
@@ -546,7 +603,11 @@ export default function App() {
         const isWorldMarket = retailer === "Cost Plus World Market";
         const isVerdi = retailer === "Verdi Commerce LLC";
         const isPriceSmart = retailer === "PriceSmart Inc.";
-        const systemPrompt = isHyVee ? HY_VEE_PROMPT : isJungleJims ? JJ_PROMPT : isImperial ? IMPERIAL_PROMPT : isTjmCan ? TJM_CAN_PROMPT : isMis ? MIS_PROMPT : isSlt ? SLT_PROMPT : isGilt ? GILT_PROMPT : isWorldMarket ? WORLD_MARKET_PROMPT : isVerdi ? VERDI_PROMPT : isPriceSmart ? PRICESMART_PROMPT : PROMPT;
+        const isWalmartCan = retailer === "Walmart Canada";
+        const isWalmartDi = retailer === "Walmart DI - US";
+        const isWalmartCanRtf = isWalmartCan && !!pdfItem.rtfText;
+        const isHomeHardware = retailer === "Home Hardware";
+        const systemPrompt = isHyVee ? HY_VEE_PROMPT : isJungleJims ? JJ_PROMPT : isImperial ? IMPERIAL_PROMPT : isTjmCan ? TJM_CAN_PROMPT : isMis ? MIS_PROMPT : isSlt ? SLT_PROMPT : isGilt ? GILT_PROMPT : isWorldMarket ? WORLD_MARKET_PROMPT : isVerdi ? VERDI_PROMPT : isPriceSmart ? PRICESMART_PROMPT : isWalmartCan ? (pdfItem.rtfText ? WAL_CAN_RTF_PROMPT : WAL_CAN_PROMPT) : isWalmartDi ? WAL_DI_PROMPT : isHomeHardware ? HH_PROMPT : PROMPT;
         let resp, data;
         for (let attempt = 0; attempt < 3; attempt++) {
           if (attempt > 0) {
@@ -562,10 +623,12 @@ export default function App() {
               system: systemPrompt,
               messages: [{
                 role: "user",
-                content: [
-                  { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfItem.base64 } },
-                  { type: "text", text: "Extract the purchase order data." }
-                ]
+                content: pdfItem.rtfText
+                  ? [{ type: "text", text: pdfItem.rtfText }]
+                  : [
+                      { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfItem.base64 } },
+                      { type: "text", text: "Extract the purchase order data." }
+                    ]
               }]
             })
           });
@@ -575,8 +638,11 @@ export default function App() {
         if (!resp.ok || data.error) throw new Error(data.error?.message || `API error ${resp.status}`);
         const raw = data.content?.find(b => b.type === "text")?.text || "";
         if (!raw) throw new Error("No text in API response. Check your API key.");
-        const po = JSON.parse(raw.replace(/```json|```/g, "").trim());
-        if (po.memo && !memo && !isHyVee) setMemo(po.memo);
+        const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+        if (parsed.memo && !memo && !isHyVee) setMemo(parsed.memo);
+        const poList = (isWalmartCan || isWalmartDi) ? (parsed.orders || []) : [parsed];
+        let newRows = [], unmatched = [], caseMismatches = [], casePackViolations = [];
+        for (const po of poList) {
 
         const mabd = fmtDate(po.mustArriveByDate || po.deliveryDate || "");
         const shipDate = mabd ? subBizDays(mabd, 10) : "";
@@ -647,7 +713,32 @@ export default function App() {
           psMabd = fmtDate(po.deliveryDate) || "";
         }
 
-        let newRows = [], unmatched = [], caseMismatches = [], casePackViolations = [];
+        let walCanShipDate = "", walCanCancelDate = "", walCanMabd = "";
+        if (isWalmartCan) {
+          walCanShipDate = isoToMDY(po.shipDate);
+          walCanCancelDate = isoToMDY(po.cancelDate) || (walCanShipDate ? addDays(walCanShipDate, 7) : "");
+          walCanMabd = isWalmartCanRtf ? "" : isoToMDY(po.mabd);
+        }
+
+        let hhShipDate = "", hhCancelDate = "", hhMabd = "";
+        if (isHomeHardware) {
+          hhShipDate = fmtDate(po.shipDate);
+          hhCancelDate = hhShipDate;
+          hhMabd = hhShipDate;
+        }
+
+        let walDiShipDate = "", walDiCancelDate = "", walDiMemo = "";
+        if (isWalmartDi) {
+          walDiShipDate = isoToMDY(po.shipDate);
+          walDiCancelDate = isoToMDY(po.cancelDate);
+          const inStoreFmt = po.inStoreDate ? (([y,m,d]) => `${parseInt(m)}/${parseInt(d)}/${y.slice(2)}`)(po.inStoreDate.split("-")) : "";
+          walDiMemo = [
+            po.eventCode ? `Event code ${po.eventCode}` : "",
+            po.quoteId ? `Quote ID ${po.quoteId}` : "",
+            inStoreFmt ? `In store date ${inStoreFmt}` : "",
+            po.loadingPort ? `Loading port ${po.loadingPort}` : "",
+          ].filter(Boolean).join(" - ");
+        }
 
         for (const line of po.lineItems) {
           let nsSku = "", parentSku = "", qty = 0, rate = 0, rowCaseMismatch = false, rowDepartment = "", rowCustomerPartNum = "";
@@ -769,6 +860,10 @@ export default function App() {
             qty = Number(line.quantity) || 0;
             rate = Number(line.unitCost) || 0;
             rowCustomerPartNum = line.sku ? String(parseInt(line.sku, 10)) : "";
+            const sltShipPack = Number(line.shipPackQty) || 0;
+            if (sltShipPack > 0 && qty % sltShipPack !== 0) {
+              casePackViolations.push(`${line.style || line.sku || "?"} — ordered ${qty}, ship pack ${sltShipPack}`);
+            }
           } else if (isMis) {
             const sku = String(line.sku || "").trim();
             const m = imUpdateRaw?.items?.length ? (
@@ -856,6 +951,62 @@ export default function App() {
             qty = Number(line.quantity) || 0;
             rate = Number(line.unitCost) || 0;
             rowCustomerPartNum = String(line.itemNo || "");
+          } else if (isWalmartCan) {
+            const vendorStyle = String(line.vendorStyle || "").trim();
+            const m = imUpdateRaw?.items?.length ? (
+              imUpdateRaw.items.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase()) ||
+              imUpdateRaw.items.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase())
+            ) : null;
+            if (m) {
+              nsSku = String(m["Child SKU"] || "").trim();
+              parentSku = String(m["Parent SKU"] || "").trim();
+            } else {
+              unmatched.push(vendorStyle || "");
+              nsSku = vendorStyle;
+              parentSku = "";
+            }
+            qty = Number(line.quantity) || 0;
+            rate = Number(line.unitCost) || 0;
+            const walCanShipPack = Number(line.shipPackQty || line.packQty) || 0;
+            if (walCanShipPack > 0 && qty % walCanShipPack !== 0) {
+              casePackViolations.push(`${line.vendorStyle || "?"} — ordered ${qty}, ship pack ${walCanShipPack}`);
+            }
+          } else if (isWalmartDi) {
+            const vendorStyle = String(line.vendorStyle || "").trim();
+            const m = imUpdateRaw?.items?.length ? (
+              imUpdateRaw.items.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase()) ||
+              imUpdateRaw.items.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase())
+            ) : null;
+            if (m) {
+              nsSku = String(m["Child SKU"] || "").trim();
+              parentSku = String(m["Parent SKU"] || "").trim();
+            } else {
+              unmatched.push(vendorStyle || "");
+              nsSku = vendorStyle;
+              parentSku = "";
+            }
+            qty = Number(line.quantity) || 0;
+            rate = Number(line.unitCost) || 0;
+            const walDiPackQty = Number(line.packQty) || 0;
+            if (walDiPackQty > 1 && qty % walDiPackQty !== 0) {
+              casePackViolations.push(`${line.vendorStyle || "?"} — ordered ${qty}, pack size ${walDiPackQty}`);
+            }
+          } else if (isHomeHardware) {
+            const vendorStyle = String(line.vendorStyle || "").trim();
+            const m = imUpdateRaw?.items?.length ? (
+              imUpdateRaw.items.find(it => String(it["Child SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase()) ||
+              imUpdateRaw.items.find(it => String(it["Parent SKU"] || "").trim().toUpperCase() === vendorStyle.toUpperCase())
+            ) : null;
+            if (m) {
+              nsSku = String(m["Child SKU"] || "").trim();
+              parentSku = String(m["Parent SKU"] || "").trim();
+            } else {
+              unmatched.push(vendorStyle || "");
+              nsSku = vendorStyle;
+              parentSku = "";
+            }
+            qty = Number(line.quantity) || 0;
+            rate = Number(line.unitCost) || 0;
           } else {
             if (imUpdateRaw?.items?.length) {
               const m = lookup(imUpdateRaw.items, line.upc, line.vendorItemNum);
@@ -876,32 +1027,36 @@ export default function App() {
             rowCustomerPartNum = String(line.itemNum || "");
           }
 
-          const rowMemo = isHyVee
+          const rowMemo = isHomeHardware
+            ? `Ship - HHOCEAN@HOMEHARDWARE.CA 5196644751\n*Note: Ship date is the date this P.O. should be shipped from your warehouse\nINVOICE MUST SHOW HOME'S ITEM# ${line.hhNbr || ""}`
+            : isHyVee
             ? `PODate ${po.orderDate} RequestedShipDate ${shipDate} CancelDate ${cancelDate} MustArriveBy ${mabd}`
             : isJungleJims ? jjMemo
             : isTjmCan ? tjmMemo
             : isMis ? misMemo
             : isSlt ? rc.defaultMemo
+            : isWalmartDi ? walDiMemo
+            : isWalmartCan ? (isWalmartCanRtf ? (po.quoteId ? `QUOTE ID: ${po.quoteId}` : "") : (po.quoteNumber ? `QUOTE COPIED FROM TEMPLATE: ${po.quoteNumber}` : ""))
             : isPriceSmart ? (memo || po.memo || "")
             : (memo || po.memo || "");
           const sltPoNumber = isSlt && po.poNumber ? String(parseInt(po.poNumber, 10)) : null;
           const shipToName = po.shipToName || (isHyVee ? "HY-VEE, INC." : "");
           newRows.push({
-            "Order #": po.poNumber, "NS SKU": nsSku, "Date": isSlt ? sltDate : isMis ? misDate : fmtDate(po.orderDate),
+            "Order #": po.poNumber, "NS SKU": nsSku, "Date": isSlt ? sltDate : isMis ? misDate : (isWalmartCan || isWalmartDi) ? isoToMDY(po.orderDate) : fmtDate(po.orderDate),
             "Quantity": qty, "Item Rate": rate, "Amount": parseFloat((qty * rate).toFixed(2)),
             "Is EDI Sent": rc.isEdiSent, "PO Number": isSlt ? sltPoNumber : po.poNumber, "NS CUSTOMER": rc.nsCustomer,
             "Status": orderStatus,
-            "Ship Date": isPriceSmart ? psShipDate : isVerdi ? verdiShipDate : isWorldMarket ? wmShipDate : isGilt ? giltShipDate : isTjmCan ? tjmShipDate : isJungleJims ? jjShipDate : isMis ? misShipDate : isSlt ? sltShipDate : shipDate,
-            "Cancel Date": isPriceSmart ? psCancelDate : isVerdi ? verdiCancelDate : isWorldMarket ? wmCancelDate : isGilt ? giltCancelDate : isTjmCan ? tjmCancelDate : isJungleJims ? jjCancelDate : isMis ? misCancelDate : isSlt ? sltCancelDate : cancelDate,
-            "Must Arrive By Date": isPriceSmart ? psMabd : isVerdi ? verdiMabd : isWorldMarket ? wmMabd : isGilt ? giltMabd : isTjmCan ? tjmMabd : isJungleJims ? jjMabd : isMis ? misMabd : isSlt ? sltMabd : mabd,
-            "Name": isTjmCan ? tjmChainName : shipToName,
+            "Ship Date": isHomeHardware ? hhShipDate : isWalmartDi ? walDiShipDate : isWalmartCan ? walCanShipDate : isPriceSmart ? psShipDate : isVerdi ? verdiShipDate : isWorldMarket ? wmShipDate : isGilt ? giltShipDate : isTjmCan ? tjmShipDate : isJungleJims ? jjShipDate : isMis ? misShipDate : isSlt ? sltShipDate : shipDate,
+            "Cancel Date": isHomeHardware ? hhCancelDate : isWalmartDi ? walDiCancelDate : isWalmartCan ? walCanCancelDate : isPriceSmart ? psCancelDate : isVerdi ? verdiCancelDate : isWorldMarket ? wmCancelDate : isGilt ? giltCancelDate : isTjmCan ? tjmCancelDate : isJungleJims ? jjCancelDate : isMis ? misCancelDate : isSlt ? sltCancelDate : cancelDate,
+            "Must Arrive By Date": isHomeHardware ? hhMabd : isWalmartDi ? "" : isWalmartCan ? walCanMabd : isPriceSmart ? psMabd : isVerdi ? verdiMabd : isWorldMarket ? wmMabd : isGilt ? giltMabd : isTjmCan ? tjmMabd : isJungleJims ? jjMabd : isMis ? misMabd : isSlt ? sltMabd : mabd,
+            "Name": isHomeHardware ? "HOME HARDWARE STORES LTD" : (isWalmartCan || isWalmartDi) ? (po.addressee || "") : isTjmCan ? tjmChainName : shipToName,
             "Attention": isTjmCan ? "" : (po.shipToAttention || ""),
-            "Address 1": isTjmCan ? (tjmDcAddress.address1 || "") : po.shipToAddress1,
+            "Address 1": isHomeHardware ? "34 Henry Street West" : isTjmCan ? (tjmDcAddress.address1 || "") : po.shipToAddress1,
             "Address 2": isTjmCan ? "" : (po.shipToAddress2 || ""),
-            "City": isTjmCan ? (tjmDcAddress.city || "") : po.shipToCity,
-            "State": isTjmCan ? (tjmDcAddress.state || "") : po.shipToState,
-            "Zip": isTjmCan ? (tjmDcAddress.zip || "") : po.shipToZip,
-            "Country": isTjmCan ? "Canada" : po.shipToCountry,
+            "City": isHomeHardware ? "St. Jacobs" : isTjmCan ? (tjmDcAddress.city || "") : po.shipToCity,
+            "State": isHomeHardware ? "ON" : isTjmCan ? (tjmDcAddress.state || "") : po.shipToState,
+            "Zip": isHomeHardware ? "N0B2N0" : isTjmCan ? (tjmDcAddress.zip || "") : po.shipToZip,
+            "Country": isHomeHardware ? "CA" : isWalmartDi ? "US" : isWalmartCan ? "CA" : isTjmCan ? "Canada" : po.shipToCountry,
             "Location": rc.defaultLocation || "",
             "Ship Method": shipMethod, "Memo": rowMemo,
             "Customer Part Number": rowCustomerPartNum,
@@ -913,6 +1068,7 @@ export default function App() {
             "_unmatched": unmatched.length > prevUnmatchedLen,
           });
         }
+        } // end for (const po of poList)
 
         if (caseMismatches.length > 0) newRows = newRows.map(r => ({ ...r, _poHasMismatch: true }));
         currentPdfs = currentPdfs.map(p => p.id === pdfItem.id ? { ...p, status: "done", rows: newRows, unmatched, caseMismatches, casePackViolations } : p);
@@ -944,8 +1100,11 @@ export default function App() {
   const isGiltRetailer = retailer === "Gilt";
   const isWorldMarketRetailer = retailer === "Cost Plus World Market";
   const isSamplesRetailer = retailer === "Samples";
-  const memoIsHardcoded = !isGnbRetailer && (isJungleJimsRetailer || isTjmCanRetailer || isMisRetailer || isSltRetailer);
-  const effectiveRows = rows.map((r, idx) => ({
+  const isWalmartCanRetailer = retailer === "Walmart Canada";
+  const isWalmartDiRetailer = retailer === "Walmart DI - US";
+  const isHomeHardwareRetailer = retailer === "Home Hardware";
+  const memoIsHardcoded = !isGnbRetailer && (isJungleJimsRetailer || isTjmCanRetailer || isMisRetailer || isSltRetailer || isHomeHardwareRetailer);
+  const effectiveRows = useMemo(()=>rows.map((r, idx) => ({
     ...r,
     ...(rowOverrides[idx] || {}),
     // GNB rows carry per-row ship method from distro; don't override with global selector
@@ -966,24 +1125,66 @@ export default function App() {
     ...(isSamplesRetailer && samplesCancelDate ? { "Cancel Date": isoToMDY(samplesCancelDate) } : {}),
     ...(isSamplesRetailer && samplesMabd ? { "Must Arrive By Date": isoToMDY(samplesMabd) } : {}),
     // GNB and JJ memos are auto-generated per row; don't override
-    ...(!isGnbRetailer && !isJungleJimsRetailer && !isTjmCanRetailer && !isMisRetailer && !isSltRetailer && memo ? { "Memo": memo } : {}),
+    ...(!isGnbRetailer && !isJungleJimsRetailer && !isTjmCanRetailer && !isMisRetailer && !isSltRetailer && !isHomeHardwareRetailer && memo ? { "Memo": memo } : {}),
     "Item": r["Parent SKU"] ? `${r["Parent SKU"]} : ${r["NS SKU"]}` : r["NS SKU"] || "",
     "Customer": retailer === "Samples" && samplesSubcustomer ? `Samples : Samples - ${samplesSubcustomer}` : rc.nsCustomer,
     "Addressee": r["Name"] || "",
-  }));
+    ...(isSamplesRetailer?(()=>{
+      const t={"Addressee":toTitleCase(r["Name"]||""),"Attention":toTitleCase(r["Attention"]||""),"Address 1":toTitleCase(r["Address 1"]||""),"Address 2":toTitleCase(r["Address 2"]||""),"City":toTitleCase(r["City"]||""),"State":(r["State"]||"").toUpperCase(),"Zip":r["Zip"]||"","Country":r["Country"]||"US"};
+      if(addrBookSel!==''){const e=addressBook[parseInt(addrBookSel)];if(e)return{"Addressee":e.name||t["Addressee"],"Attention":e.attention||t["Attention"],"Address 1":e.addr1||t["Address 1"],"Address 2":e.addr2||t["Address 2"],"City":e.city||t["City"],"State":e.state||t["State"],"Zip":e.zip||t["Zip"],"Country":e.country||t["Country"]};}
+      return t;
+    })():{})
+  })),[rows,rowOverrides,shipMethod,gnbDate,gnbUpsAccount,gnbFedexAccount,orderStatus,retailer,samplesSubcustomer,samplesShipDate,samplesCancelDate,samplesMabd,memo,addrBookSel,addressBook]);
   const total = effectiveRows.reduce((s, r) => s + Number(r["Amount"]), 0);
-  const _requiredFields = (rc.defaultLocation ? [...REQUIRED_FIELDS, {label:"Location",key:"Location"}] : REQUIRED_FIELDS).filter(f => isSamplesRetailer ? f.key !== "Addressee" : true);
+  const _walCanAddrKeys = new Set(["Addressee","Address 1","City","State","Zip"]);
+  const isWalmartCanRtfMode = isWalmartCanRetailer && pdfs.some(p => p.rtfText);
+  const _requiredFields = (rc.defaultLocation ? [...REQUIRED_FIELDS, {label:"Location",key:"Location"}] : REQUIRED_FIELDS).filter(f => isSamplesRetailer ? f.key !== "Addressee" : true).filter(f => (isWalmartCanRetailer || isWalmartDiRetailer) ? !_walCanAddrKeys.has(f.key) : true).filter(f => (isWalmartDiRetailer || isWalmartCanRtfMode) ? f.key !== "Must Arrive By Date" : true);
   const missingFields = (result && effectiveRows.length > 0) ? _requiredFields.filter(f => effectiveRows.some(r => !hasVal(r[f.key]))) : [];
+  const _groundWarning = (() => {
+    if (!result || !isSamplesRetailer || !rows.length) return {active:false,key:''};
+    const r0 = rows[0];
+    const destState = addrBookSel!=='' ? (addressBook[parseInt(addrBookSel)]?.state||'') : (r0["State"]||'');
+    if (!destState) return {active:false,key:''};
+    const mabdMdy = r0["Must Arrive By Date"]||'';
+    const [bm,bd,by] = mabdMdy.split('/');
+    const mabdIso = by ? `${by}-${(bm||'').padStart(2,'0')}-${(bd||'').padStart(2,'0')}` : '';
+    if (!mabdIso) return {active:false,key:''};
+    const shipMdy = samplesShipDate ? isoToMDY(samplesShipDate) : (r0["Ship Date"]||'');
+    const [sm,sd,sy] = (shipMdy||'').split('/');
+    const shipIso = sy ? `${sy}-${(sm||'').padStart(2,'0')}-${(sd||'').padStart(2,'0')}` : '';
+    if (!shipIso) return {active:false,key:''};
+    const est = isoAddBizDays(shipIso, upsGroundDays('', destState));
+    return {active:!!(est&&est>mabdIso), key:`${shipIso}|${mabdIso}|${destState}`};
+  })();
+  const samplesGroundWarningActive = _groundWarning.active;
+  const samplesGroundWarnKey = _groundWarning.key;
+  const showGroundWarnPopup = samplesGroundWarningActive && samplesGroundWarnKey !== groundWarnDismissedFor;
   const queuedCount = pdfs.filter(p => p.status === "queued").length;
   const hasPdfs = pdfs.length > 0;
+
+  if(!authUser) return(
+    <div style={{fontFamily:"var(--font-sans)",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{textAlign:"center",padding:"2rem"}}>
+        <h2 style={{fontSize:22,fontWeight:600,margin:"0 0 8px",color:"var(--color-text-primary)"}}>NetSuite PO Converter</h2>
+        <p style={{fontSize:14,color:"var(--color-text-secondary)",margin:"0 0 24px"}}>Sign in to continue</p>
+        <button
+          onClick={()=>netlifyIdentity.open('login')}
+          style={{padding:"9px 28px",fontSize:14,fontWeight:600,fontFamily:"var(--font-sans)",background:"var(--color-text-primary)",color:"var(--color-background-primary)",border:"none",borderRadius:6,cursor:"pointer"}}
+        >Sign in</button>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{fontFamily:"var(--font-sans)",padding:"1.75rem 0",maxWidth:680}}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes im-blink{0%,100%{background:#fee2e2;color:#dc2626}50%{background:transparent;color:var(--color-text-secondary)}} .im-blink{animation:im-blink 1.4s ease-in-out infinite}`}</style>
 
-      <div style={{marginBottom:"1.25rem"}}>
-        <h2 style={{fontSize:24,fontWeight:600,margin:"0 0 6px",color:"var(--color-text-primary)"}}>NetSuite PO Converter</h2>
-        <p style={{fontSize:15,color:"var(--color-text-secondary)",margin:0}}>Upload retailer purchase orders and download a NetSuite-ready CSV</p>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:"1.25rem"}}>
+        <div>
+          <h2 style={{fontSize:24,fontWeight:600,margin:"0 0 6px",color:"var(--color-text-primary)"}}>NetSuite PO Converter</h2>
+          <p style={{fontSize:15,color:"var(--color-text-secondary)",margin:0}}>Upload retailer purchase orders and download a NetSuite-ready CSV</p>
+        </div>
+        {!import.meta.env.DEV&&<button onClick={()=>netlifyIdentity.logout()} style={{fontSize:12,color:"var(--color-text-tertiary)",background:"none",border:"none",cursor:"pointer",fontFamily:"var(--font-sans)",padding:"4px 0",marginTop:4,textDecoration:"underline"}}>Sign out</button>}
       </div>
 
       {(()=>{
@@ -1032,7 +1233,7 @@ export default function App() {
           </div>
           {retailer==="Samples"&&(
             <div>
-              <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Subcustomer</label>
+              <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Subcustomer<span style={{color:"var(--color-text-danger)",marginLeft:2}}>*</span></label>
               <select style={{...S.select,padding:"7px 10px",fontSize:13}} value={samplesSubcustomer} onChange={e=>setSamplesSubcustomer(e.target.value)} disabled={busy}>
                 <option value="" disabled>Select One</option>
                 <option>Charitable Contributions</option>
@@ -1045,7 +1246,7 @@ export default function App() {
           )}
           <div>
             <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Ship method</label>
-            <select style={{...S.select,padding:"7px 10px",fontSize:13}} value={shipMethod} onChange={e=>{setShipMethod(e.target.value);setSettingsTouched(true);}} disabled={busy}>
+            <select style={{...S.select,padding:"7px 10px",fontSize:13,...(samplesGroundWarningActive?{animation:"blink-warn 1s ease-in-out infinite"}:{})}} value={shipMethod} onChange={e=>{setShipMethod(e.target.value);setSettingsTouched(true);}} disabled={busy}>
               <option value="">-Leave Blank-</option>
               {SHIP_METHODS.map(m=><option key={m} value={m}>{m}</option>)}
             </select>
@@ -1060,15 +1261,15 @@ export default function App() {
         {isSamplesRetailer&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}}>
           <div>
             <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Ship Date</label>
-            <input style={{...S.input,padding:"7px 10px",fontSize:13}} type="date" value={samplesShipDate} onChange={e=>{const v=e.target.value;setSamplesShipDate(v);if(v){setSamplesCancelDate(isoAddBizDays(v,1));setSamplesMabd(isoAddBizDays(v,5));}else{setSamplesCancelDate("");setSamplesMabd("");}}} disabled={busy}/>
+            <input style={{...S.input,padding:"7px 10px",fontSize:13,...(samplesGroundWarningActive?{animation:"blink-warn 1s ease-in-out infinite"}:{})}} type="date" value={samplesShipDate} onChange={e=>{const v=e.target.value;setSamplesShipDate(v);if(v){setSamplesCancelDate(isoAddBizDays(v,1));setSamplesMabd(isoAddBizDays(v,5));}else{setSamplesCancelDate("");setSamplesMabd("");}}} disabled={busy}/>
           </div>
           <div>
             <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Cancel Date</label>
-            <input style={{...S.input,padding:"7px 10px",fontSize:13}} type="date" value={samplesCancelDate} onChange={e=>setSamplesCancelDate(e.target.value)} disabled={busy}/>
+            <input style={{...S.input,padding:"7px 10px",fontSize:13,...(samplesGroundWarningActive?{animation:"blink-warn 1s ease-in-out infinite"}:{})}} type="date" value={samplesCancelDate} onChange={e=>setSamplesCancelDate(e.target.value)} disabled={busy}/>
           </div>
           <div>
             <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Must Arrive By Date</label>
-            <input style={{...S.input,padding:"7px 10px",fontSize:13}} type="date" value={samplesMabd} onChange={e=>setSamplesMabd(e.target.value)} disabled={busy}/>
+            <input style={{...S.input,padding:"7px 10px",fontSize:13,...(samplesGroundWarningActive?{animation:"blink-warn 1s ease-in-out infinite"}:{})}} type="date" value={samplesMabd} onChange={e=>setSamplesMabd(e.target.value)} disabled={busy}/>
           </div>
         </div>}
         {isGnbRetailer ? (
@@ -1087,10 +1288,38 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <div>
-            <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Memo <span style={{fontWeight:400,color:"var(--color-text-tertiary)"}}>— optional</span></label>
-            <input style={{...S.input,padding:"7px 10px",fontSize:13}} type="text" placeholder="e.g. Spring 2026 Drop" value={memo} onChange={e=>{setMemo(e.target.value);setSettingsTouched(true);}} disabled={busy}/>
-          </div>
+          <>
+            {isSamplesRetailer&&<div style={{marginBottom:8}} ref={addrBookRef}>
+              <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Address Book</label>
+              <div style={{position:"relative"}}>
+                <button type="button" disabled={busy} onClick={()=>setAddrBookOpen(o=>!o)}
+                  style={{...S.select,padding:"7px 10px",fontSize:13,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:busy?"not-allowed":"pointer",textAlign:"left"}}>
+                  <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>
+                    {addrBookSel!==''?addressBook[parseInt(addrBookSel)]?.name||'— Select address —':'— Select address —'}
+                  </span>
+                  <span style={{marginLeft:6,flexShrink:0,fontSize:10,opacity:0.5}}>{addrBookOpen?'▴':'▾'}</span>
+                </button>
+                {addrBookOpen&&<div style={{position:"absolute",top:"calc(100% + 2px)",left:0,right:0,zIndex:200,background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,0.12)",overflow:"hidden"}}>
+                  <div style={{padding:"7px 10px",fontSize:13,cursor:"pointer",color:"var(--color-text-tertiary)"}} onClick={()=>{setAddrBookSel('');setAddrBookOpen(false);}}>— Select address —</div>
+                  {addressBook.map((e,i)=>(
+                    <div key={i} onClick={()=>{setAddrBookSel(String(i));setAddrBookOpen(false);}}
+                      style={{padding:"7px 10px",cursor:"pointer",borderTop:"1px solid var(--color-border-tertiary)",background:addrBookSel===String(i)?"var(--color-background-secondary)":"transparent"}}
+                      onMouseEnter={ev=>ev.currentTarget.style.background="var(--color-background-secondary)"}
+                      onMouseLeave={ev=>ev.currentTarget.style.background=addrBookSel===String(i)?"var(--color-background-secondary)":"transparent"}>
+                      <div style={{fontSize:13,color:"var(--color-text-primary)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.name}</div>
+                      <div style={{fontSize:11,color:"var(--color-text-tertiary)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",marginTop:1}}>
+                        {[e.addr1,e.addr2,e.city,[e.state,e.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ')}
+                      </div>
+                    </div>
+                  ))}
+                </div>}
+              </div>
+            </div>}
+            <div>
+              <label style={{...S.fieldLabel,fontSize:11,marginBottom:4}}>Memo</label>
+              <input style={{...S.input,padding:"7px 10px",fontSize:13}} type="text" placeholder="e.g. Spring 2026 Drop" value={memo} onChange={e=>{setMemo(e.target.value);setSettingsTouched(true);}} disabled={busy}/>
+            </div>
+          </>
         )}
         {settingsTouched&&settingsChanged&&!(memoIsHardcoded&&shipMethod===activeDefaults?.shipMethod&&orderStatus===activeDefaults?.status)&&(
           <p style={{marginTop:8,fontSize:12,color:"var(--color-text-tertiary)"}}>
@@ -1197,12 +1426,22 @@ export default function App() {
       {settingsTab==="main"&&retailer==="Samples"&&<div style={S.card}>
         <span style={S.sectionLabel}><i className="ti ti-message-2" aria-hidden="true" style={{marginRight:6,fontSize:12,verticalAlign:"-1px"}}/>Sample request</span>
         <textarea
-          style={{...S.input,padding:"9px 12px",fontSize:13,minHeight:150,resize:"vertical",lineHeight:1.55,display:"block"}}
-          placeholder={"Paste the Slack request here…\n\n1x DMW10008\nRaine Page\n316 Robinhood Road\nBrentwood, TN 37027"}
+          style={{...S.input,padding:"9px 12px",fontSize:13,minHeight:200,resize:"vertical",lineHeight:1.55,display:"block"}}
+          placeholder={"Paste Slack request here....\n\n3x DRG41401\n2x DSSP50005\n\nStoreBound HQ\n\nATTN: John Doe"}
           value={samplesText}
           onChange={e=>setSamplesText(e.target.value)}
           disabled={busy}
         />
+        {result&&rows.length>0&&rows[0]["Name"]&&<button
+          style={{...S.btnReplace,marginTop:8}}
+          onClick={()=>{
+            const r0=rows[0];
+            const entry={name:r0["Name"]||"",attention:r0["Attention"]||"",addr1:r0["Address 1"]||"",addr2:r0["Address 2"]||"",city:r0["City"]||"",state:r0["State"]||"",zip:r0["Zip"]||"",country:r0["Country"]||"US"};
+            const updated=[...addressBook,entry].sort((a,b)=>a.name.localeCompare(b.name));
+            setAddressBook(updated);
+            localStorage.setItem(AB_KEY,JSON.stringify(updated));
+          }}
+        >Add to Address Book</button>}
       </div>}
 
       {/* PDF card */}
@@ -1214,7 +1453,7 @@ export default function App() {
       >
         {!hasPdfs ? (
           <>
-          <span style={S.sectionLabel}><i className="ti ti-file-type-pdf" aria-hidden="true" style={{marginRight:6,fontSize:12,verticalAlign:"-1px"}}/>Purchase order PDFs</span>
+          <span style={S.sectionLabel}><i className="ti ti-file-type-pdf" aria-hidden="true" style={{marginRight:6,fontSize:12,verticalAlign:"-1px"}}/>{isWalmartDiRetailer?"Purchase Order RTFs":"Purchase order PDFs"}</span>
           <div
             style={{...S.dzBase,...(pdfDrag?S.dzHover:{})}}
             onClick={()=>pdfRef.current?.click()}
@@ -1222,15 +1461,32 @@ export default function App() {
             onDragLeave={()=>setPdfDrag(false)}
             onDrop={e=>{e.preventDefault();setPdfDrag(false);handleFiles(e.dataTransfer.files);}}>
             <i className="ti ti-file-type-pdf" aria-hidden="true" style={{fontSize:36,color:"var(--color-text-secondary)",display:"block",marginBottom:10}}/>
-            <p style={{fontSize:15,fontWeight:500,color:"var(--color-text-primary)",margin:0}}>{isGnbRetailer?"Click or drag to upload GNB blanket PO + distro sheet":"Click or drag to upload PO PDFs"}</p>
-            <p style={{fontSize:13,color:"var(--color-text-secondary)",margin:"6px 0 0"}}>{isGnbRetailer?"Drop both PDFs together — the app will detect which is which":"Select multiple files at once · ZIP supported · any retailer format"}</p>
+            {isWalmartDiRetailer
+              ? <>
+                  <p style={{fontSize:15,fontWeight:500,color:"var(--color-text-primary)",margin:0}}>Click or drag to upload .rtf file(s)</p>
+                  <p style={{fontSize:13,color:"var(--color-text-secondary)",margin:"6px 0 0",lineHeight:1.5}}>Navigate to Retail Link &gt; Apps &gt; Import PO Delivery &gt; type in PO #(s) &gt; Add to List &gt; Retrieve Prints &gt; save .rtf file and upload here. You may upload one .rtf with multiple POs.</p>
+                </>
+              : isWalmartCanRetailer
+              ? <>
+                  <p style={{fontSize:15,fontWeight:500,color:"var(--color-text-primary)",margin:0}}>Upload PDF from SPS Commerce or .rtf from Retail Link</p>
+                  <p style={{fontSize:13,color:"var(--color-text-secondary)",margin:"6px 0 0",lineHeight:1.6}}>
+                    <br/>
+                    <strong>SPS Commerce:</strong> Log in &gt; Fulfillment &gt; Transactions &gt; check off one or multiple orders &gt; click the three dots on the bottom &gt; Print and save as PDF.<br/><br/>
+                    <strong>Retail Link:</strong> Navigate to Retail Link &gt; Apps &gt; Import PO Delivery &gt; select WAL-MART CANADA CORP. for the 2nd criteria &gt; type in PO #(s) &gt; Add to List &gt; Retrieve Prints &gt; save .rtf file and upload here.
+                  </p>
+                </>
+              : <>
+                  <p style={{fontSize:15,fontWeight:500,color:"var(--color-text-primary)",margin:0}}>{isGnbRetailer?"Click or drag to upload GNB blanket PO + distro sheet":"Click or drag to upload PO PDFs"}</p>
+                  <p style={{fontSize:13,color:"var(--color-text-secondary)",margin:"6px 0 0"}}>{isGnbRetailer?"Drop both PDFs together — the app will detect which is which":"Select multiple files at once · ZIP supported · any retailer format"}</p>
+                </>
+            }
           </div>
           {import.meta.env.DEV&&<button onClick={loadTestPDFs} style={{marginTop:8,fontSize:12,padding:"5px 12px",fontFamily:"var(--font-sans)",border:"1px dashed var(--color-border-secondary)",borderRadius:6,background:"transparent",color:"var(--color-text-tertiary)",cursor:"pointer"}}>⚙ Load test PDFs</button>}
           </>
         ) : (
           <>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-            <span style={{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:"var(--color-text-secondary)"}}>Purchase order PDFs</span>
+            <span style={{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:"var(--color-text-secondary)"}}>{isWalmartDiRetailer?"Purchase Order RTFs":"Purchase order PDFs"}</span>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
               {!busy&&<span style={{fontSize:13,color:"var(--color-text-primary)",cursor:"pointer",textDecoration:"underline",fontWeight:500}} onClick={()=>pdfRef.current?.click()}>+ Add more</span>}
               {import.meta.env.DEV&&!busy&&<button onClick={loadTestPDFs} style={{fontSize:12,padding:"3px 10px",fontFamily:"var(--font-sans)",border:"1px dashed var(--color-border-secondary)",borderRadius:6,background:"transparent",color:"var(--color-text-tertiary)",cursor:"pointer"}}>⚙ Load test PDFs</button>}
@@ -1276,7 +1532,7 @@ export default function App() {
           </div>
           </>
         )}
-        <input ref={pdfRef} type="file" accept="application/pdf,.zip" multiple style={{display:"none"}} onChange={e=>{handleFiles(e.target.files);e.target.value="";}}/>
+        <input ref={pdfRef} type="file" accept="application/pdf,.zip,.rtf" multiple style={{display:"none"}} onChange={e=>{handleFiles(e.target.files);e.target.value="";}}/>
       </div>}
 
       {settingsTab==="main"&&<>
@@ -1309,8 +1565,8 @@ export default function App() {
         {result.allCaseMismatches?.length>0&&<div style={S.msgWarn}><span><strong>⚠️ {result.allCaseMismatches.length>1?"Case Pack Mismatch Warnings":"Case Pack Mismatch Warning"}</strong><br/>{result.allCaseMismatches.map((m,i)=><span key={i}>{m}.<br/></span>)}<br/>{result.allCaseMismatches.length>1?"Contact buyer to get the POs revised to full case packs. The POs have been updated to Pending Approval pending the buyer's change.":"Contact buyer to get the PO revised to full case packs. The PO has been updated to Pending Approval pending the buyer's change."}</span></div>}
         {missingFields.length>0&&<div style={S.msgWarn}><span><strong>⚠️ {missingFields.length>1?"Missing Required Fields":"Missing Required Field"}</strong><br/>{missingFields.map((f,i)=><span key={i}>{f.label} is missing. Field is required to successfully import.<br/></span>)}</span></div>}
         {isSamplesRetailer&&result&&effectiveRows.some(r=>!hasVal(r["Addressee"])&&!hasVal(r["Attention"]))&&<div style={S.msgWarn}><i className="ti ti-alert-triangle" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/><span><strong>Missing Addressee / Attention</strong><br/>One or more orders has neither Addressee nor Attention set.</span></div>}
-        {!result.allUnmatched?.length&&imUpdateRaw?.items?.length&&<div style={S.msgOk}><i className="ti ti-circle-check" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/>All items matched to item master</div>}
         {result.failedPOs>0&&<div style={S.msgErr}><i className="ti ti-alert-circle" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/>{result.failedPOs} PDF{result.failedPOs>1?"s":""} failed — see file list above for details</div>}
+        {effectiveRows.some(r=>{const c=(r["Country"]||"").trim().toUpperCase();return c&&!["US","USA","UNITED STATES","UNITED STATES OF AMERICA","U.S.","U.S.A."].includes(c);})&&<div style={S.msgWarn}><i className="ti ti-alert-triangle" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/><span><strong>Reminder:</strong> Commercial Invoice is needed to ship this package to clear customs.</span></div>}
 
 
         <div style={{...S.card,marginTop:0}}>
@@ -1326,11 +1582,13 @@ export default function App() {
           {(()=>{
             const _hideCols=new Set(rc.hideCols||[]);
             const _extraItemCols=(rc.showCols||{})["Items"]||[];
-            const _allHeaderCols=(TABS_PREVIEW.find(t=>t.label==="Header")?.cols||[]).filter(h=>!_hideCols.has(h)).filter(h=>effectiveRows.some(r=>hasVal(r[h])));
+            const _alwaysShowCols=isSamplesRetailer?SAMPLES_ADDR_COLS:new Set();
+            const _allHeaderCols=(TABS_PREVIEW.find(t=>t.label==="Header")?.cols||[]).filter(h=>!_hideCols.has(h)).filter(h=>_alwaysShowCols.has(h)||effectiveRows.some(r=>hasVal(r[h])));
             const headerCols=showHdrCols?_allHeaderCols:_allHeaderCols.filter(h=>h==="PO Number");
             const itemCols=[...new Set([...(TABS_PREVIEW.find(t=>t.label==="Items")?.cols||[]),..._extraItemCols])].filter(h=>!_hideCols.has(h)).filter(h=>effectiveRows.some(r=>hasVal(r[h])));
             const allCols=[...headerCols,...itemCols];
             const divider=showHdrCols&&itemCols[0];
+            const _warnCols=samplesGroundWarningActive?new Set(["Ship Method","Ship Date","Cancel Date","Must Arrive By Date"]):new Set();
             return (
           <div style={{overflowX:"auto",overflowY:"auto",maxHeight:460,border:"0.5px solid var(--color-border-tertiary)",borderRadius:8}}>
             <table style={{width:"max-content",borderCollapse:"collapse"}}>
@@ -1338,7 +1596,7 @@ export default function App() {
                 <tr style={{background:"#BEBEBE"}}>
                   <th style={{...S.th,width:40,minWidth:40,position:"sticky",top:0,left:0,background:"#BEBEBE",zIndex:3}}>#</th>
                   {allCols.map(h=>(
-                    <th key={h} style={{...S.th,position:"sticky",top:0,background:"#BEBEBE",zIndex:2,...(h===divider?{borderLeft:"1.5px solid var(--color-border-secondary)"}:{})}}>{h}</th>
+                    <th key={h} style={{...S.th,position:"sticky",top:0,background:_warnCols.has(h)?"#fecaca":"#BEBEBE",zIndex:2,...(h===divider?{borderLeft:"1.5px solid var(--color-border-secondary)"}:{})}}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1347,8 +1605,8 @@ export default function App() {
                   <tr key={i} style={row._unmatched?{background:"rgba(251,146,60,0.1)"}:{}}>
                     <td style={{...S.td,borderBottom:i<effectiveRows.length-1?"0.5px solid var(--color-border-tertiary)":"none",position:"sticky",left:0,background:row._unmatched?"rgba(251,146,60,0.1)":"var(--color-background-primary)",zIndex:1,textAlign:"center",color:"var(--color-text-tertiary)",fontSize:11,width:40,minWidth:40}}>{i+1}</td>
                     {allCols.map(h=>(
-                      <td key={h} style={{...S.td,borderBottom:i<effectiveRows.length-1?"0.5px solid var(--color-border-tertiary)":"none",padding:0,position:"relative",...(h===divider?{borderLeft:"1.5px solid var(--color-border-secondary)"}:{})}}>
-                        <div aria-hidden="true" style={{visibility:"hidden",padding:"5px 9px",fontSize:13,fontFamily:"var(--font-sans)",whiteSpace:"nowrap",lineHeight:"normal",userSelect:"none"}}>{String(row[h]??'')||' '}</div>
+                      <td key={h} style={{...S.td,borderBottom:i<effectiveRows.length-1?"0.5px solid var(--color-border-tertiary)":"none",padding:0,position:"relative",...(h===divider?{borderLeft:"1.5px solid var(--color-border-secondary)"}:{}),...(_warnCols.has(h)?{background:"rgba(239,68,68,0.08)"}:{})}}>
+                        <div aria-hidden="true" style={{visibility:"hidden",padding:"5px 9px",fontSize:13,fontFamily:"var(--font-sans)",whiteSpace:"nowrap",lineHeight:"normal",userSelect:"none",...(h==="Memo"?{maxWidth:"230px",overflow:"hidden"}:{})}}>{String(row[h]??'')||' '}</div>
                         <input
                           value={row[h]??''}
                           onChange={e=>{const v=e.target.value;setRowOverrides(prev=>{const next=[...prev];const updated={...(next[i]||{}),[h]:v};if(h==="Quantity"||h==="Item Rate"){const qty=parseFloat(h==="Quantity"?v:row["Quantity"])||0;const rate=parseFloat(h==="Item Rate"?v:row["Item Rate"])||0;updated["Amount"]=parseFloat((qty*rate).toFixed(2));}next[i]=updated;return next;});}}
@@ -1385,7 +1643,7 @@ export default function App() {
               <div style={cardStyle}>
                 <span style={titleStyle}>Purchase Orders</span>
                 <div style={{display:"flex",gap:6}}>
-                  <button style={sageBtn} onClick={()=>dlCSV(isSamplesRetailer?buildSamplesCSV(effectiveRows):isGnbRetailer?buildGnbCSV(effectiveRows):isJungleJimsRetailer?buildJjCSV(effectiveRows):isImperialRetailer?buildImperialCSV(effectiveRows):isTjmCanRetailer?buildTjmCanCSV(effectiveRows):buildCSV(effectiveRows),`${retailer.replace(/[^a-zA-Z0-9\s]/g,"").replace(/\s+/g,"_")}_PO_${localISODate()}.csv`)}><i className="ti ti-download" aria-hidden="true" style={{fontSize:15}}/>Download CSV</button>
+                  <button style={sageBtn} onClick={()=>dlCSV(isSamplesRetailer?buildSamplesCSV(effectiveRows):isGnbRetailer?buildGnbCSV(effectiveRows):isJungleJimsRetailer?buildJjCSV(effectiveRows):isImperialRetailer?buildImperialCSV(effectiveRows):isTjmCanRetailer?buildTjmCanCSV(effectiveRows):isWalmartCanRetailer?buildWalmartCanCSV(effectiveRows):isWalmartDiRetailer?buildWalmartDiCSV(effectiveRows):isHomeHardwareRetailer?buildHhCSV(effectiveRows):buildCSV(effectiveRows),`${retailer.replace(/[^a-zA-Z0-9\s]/g,"").replace(/\s+/g,"_")}_PO_${localISODate()}.csv`)}><i className="ti ti-download" aria-hidden="true" style={{fontSize:15}}/>Download CSV</button>
                   <a href={import.meta.env.DEV?"https://4848284-sb1.app.netsuite.com/app/setup/assistants/nsimport/importassistant.nl?recid=210&new=T":"https://4848284.app.netsuite.com/app/setup/assistants/nsimport/importassistant.nl?recid=206&new=T"} target="_blank" rel="noreferrer" style={sageBtn}><i className="ti ti-upload" aria-hidden="true" style={{fontSize:15}}/>Import CSV</a>
                 </div>
               </div>
@@ -1397,6 +1655,14 @@ export default function App() {
         </div>
       </>)}
       </>}
+      {showGroundWarnPopup&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setGroundWarnDismissedFor(samplesGroundWarnKey)}>
+        <div style={{background:"var(--color-background-primary)",borderRadius:12,padding:"1.75rem 1.5rem",maxWidth:380,margin:"0 1rem",boxShadow:"0 8px 32px rgba(0,0,0,0.22)",border:"1px solid var(--color-border-secondary)"}} onClick={e=>e.stopPropagation()}>
+          <div style={{fontSize:28,marginBottom:10,textAlign:"center"}}>⚠️</div>
+          <p style={{fontWeight:700,fontSize:15,marginBottom:8,color:"var(--color-text-primary)",textAlign:"center"}}>UPS Ground won't arrive in time</p>
+          <p style={{fontSize:13,color:"var(--color-text-secondary)",marginBottom:16,textAlign:"center",lineHeight:1.5}}>Package won't arrive in time if shipping Ground. Please consult with your team to get this expedited for on-time arrival.</p>
+          <button onClick={()=>setGroundWarnDismissedFor(samplesGroundWarnKey)} style={S.btnPrimary}>OK, I'll check with my team</button>
+        </div>
+      </div>}
       <button
         onClick={() => setDarkMode(d => !d)}
         title={darkMode ? "Switch to light mode" : "Switch to dark mode"}

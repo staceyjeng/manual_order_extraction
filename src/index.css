@@ -114,3 +114,8 @@ h1, h2, h3 {
 p {
   margin: 0;
 }
+
+@keyframes blink-warn {
+  0%, 100% { box-shadow: 0 0 0 2px #ef4444; }
+  50% { box-shadow: none; }
+}
