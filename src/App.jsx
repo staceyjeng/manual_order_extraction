@@ -1125,7 +1125,6 @@ export default function App() {
     ...(isSamplesRetailer && samplesShipDate ? { "Ship Date": isoToMDY(samplesShipDate) } : {}),
     ...(isSamplesRetailer && samplesCancelDate ? { "Cancel Date": isoToMDY(samplesCancelDate) } : {}),
     ...(isSamplesRetailer && samplesMabd ? { "Must Arrive By Date": isoToMDY(samplesMabd) } : {}),
-    ...(!isSamplesRetailer?(()=>{const curMabd=rowOverrides[idx]?.["Must Arrive By Date"]??r["Must Arrive By Date"];const curCancel=rowOverrides[idx]?.["Cancel Date"]??r["Cancel Date"];const ctry=String(rowOverrides[idx]?.["Country"]??r["Country"]??"").trim().toUpperCase();const isIntl=ctry&&!["US","USA","UNITED STATES","UNITED STATES OF AMERICA","U.S.","U.S.A."].includes(ctry);return (isIntl||isWalmartDiRetailer)&&!hasVal(curMabd)&&hasVal(curCancel)?{"Must Arrive By Date":curCancel}:{};})()):{}),
     // GNB and JJ memos are auto-generated per row; don't override
     ...(!isGnbRetailer && !isJungleJimsRetailer && !isTjmCanRetailer && !isMisRetailer && !isSltRetailer && !isHomeHardwareRetailer && memo ? { "Memo": memo } : {}),
     "Item": r["Parent SKU"] ? `${r["Parent SKU"]} : ${r["NS SKU"]}` : r["NS SKU"] || "",
@@ -1136,7 +1135,7 @@ export default function App() {
       if(addrBookSel!==''){const e=addressBook[parseInt(addrBookSel)];if(e)return{"Addressee":e.name||t["Addressee"],"Attention":e.attention||t["Attention"],"Address 1":e.addr1||t["Address 1"],"Address 2":e.addr2||t["Address 2"],"City":e.city||t["City"],"State":e.state||t["State"],"Zip":e.zip||t["Zip"],"Country":e.country||t["Country"]};}
       return t;
     })():{})
-  })),[rows,rowOverrides,shipMethod,gnbDate,gnbUpsAccount,gnbFedexAccount,orderStatus,retailer,samplesSubcustomer,samplesShipDate,samplesCancelDate,samplesMabd,memo,addrBookSel,addressBook]);
+  })).map(r=>{if(isSamplesRetailer)return r;const curMabd=r["Must Arrive By Date"];const curCancel=r["Cancel Date"];const ctry=String(r["Country"]||"").trim().toUpperCase();const isIntl=ctry&&!["US","USA","UNITED STATES","UNITED STATES OF AMERICA","U.S.","U.S.A."].includes(ctry);if((isIntl||isWalmartDiRetailer)&&!hasVal(curMabd)&&hasVal(curCancel))return{...r,"Must Arrive By Date":curCancel};return r;}),[rows,rowOverrides,shipMethod,gnbDate,gnbUpsAccount,gnbFedexAccount,orderStatus,retailer,samplesSubcustomer,samplesShipDate,samplesCancelDate,samplesMabd,memo,addrBookSel,addressBook]);
   const total = effectiveRows.reduce((s, r) => s + Number(r["Amount"]), 0);
   const _walCanAddrKeys = new Set(["Addressee","Address 1","City","State","Zip"]);
   const isWalmartCanRtfMode = isWalmartCanRetailer && pdfs.some(p => p.rtfText);
