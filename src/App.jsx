@@ -1036,7 +1036,7 @@ export default function App() {
             : isMis ? misMemo
             : isSlt ? rc.defaultMemo
             : isWalmartDi ? walDiMemo
-            : isWalmartCan ? (isWalmartCanRtf ? (po.quoteId ? `QUOTE ID: ${po.quoteId}` : "") : (po.quoteNumber ? `QUOTE COPIED FROM TEMPLATE: ${po.quoteNumber}` : ""))
+            : isWalmartCan ? (isWalmartCanRtf ? (po.quoteId ? `QUOTE ID ${po.quoteId}` : "") : (po.quoteNumber ? `QUOTE COPIED FROM TEMPLATE: ${po.quoteNumber}` : ""))
             : isPriceSmart ? (memo || po.memo || "")
             : (memo || po.memo || "");
           const sltPoNumber = isSlt && po.poNumber ? String(parseInt(po.poNumber, 10)) : null;
@@ -1566,7 +1566,7 @@ export default function App() {
         {missingFields.length>0&&<div style={S.msgWarn}><span><strong>⚠️ {missingFields.length>1?"Missing Required Fields":"Missing Required Field"}</strong><br/>{missingFields.map((f,i)=><span key={i}>{f.label} is missing. Field is required to successfully import.<br/></span>)}</span></div>}
         {isSamplesRetailer&&result&&effectiveRows.some(r=>!hasVal(r["Addressee"])&&!hasVal(r["Attention"]))&&<div style={S.msgWarn}><i className="ti ti-alert-triangle" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/><span><strong>Missing Addressee / Attention</strong><br/>One or more orders has neither Addressee nor Attention set.</span></div>}
         {result.failedPOs>0&&<div style={S.msgErr}><i className="ti ti-alert-circle" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/>{result.failedPOs} PDF{result.failedPOs>1?"s":""} failed — see file list above for details</div>}
-        {effectiveRows.some(r=>{const c=(r["Country"]||"").trim().toUpperCase();return c&&!["US","USA","UNITED STATES","UNITED STATES OF AMERICA","U.S.","U.S.A."].includes(c);})&&<div style={S.msgWarn}><i className="ti ti-alert-triangle" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/><span><strong>Reminder:</strong> Commercial Invoice is needed to ship this package to clear customs.</span></div>}
+        {effectiveRows.some(r=>{const c=(r["Country"]||"").trim().toUpperCase();return c&&!["US","USA","UNITED STATES","UNITED STATES OF AMERICA","U.S.","U.S.A."].includes(c);})&&<div style={S.msgWarn}><i className="ti ti-alert-triangle" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/><span><strong>Reminder:</strong> Commercial Invoice is needed to accompany this shipment to clear customs.</span></div>}
 
 
         <div style={{...S.card,marginTop:0}}>
