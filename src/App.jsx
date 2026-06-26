@@ -17,7 +17,7 @@ const RETAILERS = {
   "Jungle Jims Market Inc": { nsCustomer: "Jungle Jims Market Inc", shipMethod: "UPS Ground", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultMemo: "Packing slip or invoice must be on the outside of the package, with the department specified. Jungle Jim's does not accept shipments from UPS freight. UPS Ground is Fine.", hideCols: ["Customer Part Number","Freight Account #","SCAC"], showCols: {"Items": ["Department Number"]} },
   "Mark-It Smart Inc.": { nsCustomer: "Mark-It Smart Inc.", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No" },
   "PriceSmart Inc.": { nsCustomer: "PriceSmart Inc.", shipMethod: "", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultLocation: "Direct Import", dev: true },
-  "Samples": { nsCustomer: "Samples", shipMethod: "DPP", status: "Pending Fulfillment", isEdiSent: "No", isSample: "Yes", dev: true, showCols: {"Items": ["Is Sample"]} },
+  "Samples": { nsCustomer: "Samples", shipMethod: "DPP", status: "Pending Fulfillment", isEdiSent: "No", isSample: "Yes", showCols: {"Items": ["Is Sample"]} },
   "Sur La Table": { nsCustomer: "Sur La Table", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultMemo: "Remove MABD from BOL to avoid chargeback" },
   "TJ Maxx Canada": { nsCustomer: "T.J. Maxx Corporate : T.J. Maxx - Canada", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No" },
   "Verdi Commerce LLC": { nsCustomer: "Verdi Commerce LLC", shipMethod: "Route", status: "Pending Fulfillment", isEdiSent: "No", isSample: "No", defaultMemo: "Please use the the will call form" },
