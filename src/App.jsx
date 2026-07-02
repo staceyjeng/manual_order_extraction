@@ -152,27 +152,27 @@ const MIS_PROMPT=`Extract data from this Mark-It Smart purchase order PDF. Retur
 const TJM_CAN_PROMPT=`Extract data from this TJ Maxx Canada purchase order PDF. Return ONLY valid JSON, no markdown, no explanation.\n\n{"chainName":"","poNumber":"","prefix":"","deptNo":"","dealNumber":"","orderDate":"MM/DD/YYYY","shipDate":"MM/DD/YYYY","cancelDate":"MM/DD/YYYY","lineItems":[{"vendorStyle":"","style":"","unitCost":0.00,"units":0}]}\n\nRules:\n- chainName = the large text in the top-left of page 1 (HOMESENSE, WINNERS, or MARSHALLS — exact spelling, uppercase)\n- poNumber = Import PO Number with the space replaced by a hyphen (e.g. "45 488676" → "45-488676")\n- prefix = the number before the space in Import PO Number (e.g. "45")\n- deptNo = DEPT. NO field value\n- dealNumber = DEAL # field value\n- orderDate = DEAL CREATE DATE in MM/DD/YYYY\n- shipDate = START SHIP DATE in MM/DD/YYYY\n- cancelDate = CANCEL IF NOT RECEIVED AT FREIGHT FORWARDER BY date in MM/DD/YYYY\n- lineItems: each row in the items table. vendorStyle=VENDOR STYLE column. style=STYLE column (6-digit). unitCost=UNIT COST (decimal). units=UNITS (integer).\n- Extract ALL line items.\n- ONLY JSON.`;
 
 const S = {
-  card:{background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"1.4rem 1.5rem",marginBottom:"1.1rem"},
+  card:{background:"#FFFFFF",border:"1px solid var(--color-border-secondary)",borderRadius:12,padding:"1.4rem 1.5rem",marginBottom:"1.1rem",boxShadow:"0 1px 3px rgba(0,0,0,0.07),0 1px 2px rgba(0,0,0,0.04)"},
   sectionLabel:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:"var(--color-text-secondary)",display:"block",marginBottom:12},
   fieldLabel:{fontSize:14,fontWeight:500,color:"var(--color-text-primary)",display:"block",marginBottom:6},
   select:{width:"100%",boxSizing:"border-box",padding:"10px 12px",fontSize:14,fontFamily:"var(--font-sans)",borderRadius:8,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)",cursor:"pointer"},
   input:{width:"100%",boxSizing:"border-box",padding:"10px 12px",fontSize:14,fontFamily:"var(--font-sans)",borderRadius:8,border:"1px solid var(--color-border-secondary)",background:"var(--color-background-primary)",color:"var(--color-text-primary)"},
   dzBase:{border:"2px dashed var(--color-border-secondary)",borderRadius:10,padding:"2.5rem 1.5rem",textAlign:"center",cursor:"pointer",background:"var(--color-background-secondary)",transition:"border-color 0.15s,background 0.15s"},
   dzHover:{border:"2px dashed var(--color-border-info)",background:"var(--color-background-info)"},
-  btnPrimary:{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:"13px 20px",fontSize:15,fontWeight:500,fontFamily:"var(--font-sans)",border:"none",borderRadius:8,background:"#363737",color:"#fff",cursor:"pointer"},
-  btnPrimaryDis:{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:"13px 20px",fontSize:15,fontWeight:500,fontFamily:"var(--font-sans)",border:"none",borderRadius:8,background:"#363737",color:"#fff",cursor:"not-allowed",opacity:0.4},
+  btnPrimary:{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:"13px 20px",fontSize:15,fontWeight:600,fontFamily:"var(--font-sans)",border:"none",borderRadius:8,background:"var(--color-accent)",color:"#fff",cursor:"pointer"},
+  btnPrimaryDis:{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",padding:"13px 20px",fontSize:15,fontWeight:600,fontFamily:"var(--font-sans)",border:"none",borderRadius:8,background:"var(--color-accent)",color:"#fff",cursor:"not-allowed",opacity:0.4},
   btnOutline:{display:"flex",alignItems:"center",gap:6,padding:"10px 18px",fontSize:14,fontWeight:500,fontFamily:"var(--font-sans)",border:"1px solid var(--color-border-secondary)",borderRadius:8,background:"var(--color-background-primary)",color:"var(--color-text-primary)",cursor:"pointer"},
-  btnSuccess:{display:"flex",alignItems:"center",gap:6,padding:"10px 22px",fontSize:14,fontWeight:500,fontFamily:"var(--font-sans)",border:"none",borderRadius:8,background:"#166534",color:"#fff",cursor:"pointer"},
+  btnSuccess:{display:"flex",alignItems:"center",gap:6,padding:"10px 22px",fontSize:14,fontWeight:600,fontFamily:"var(--font-sans)",border:"none",borderRadius:8,background:"var(--color-accent)",color:"#fff",cursor:"pointer"},
   btnReplace:{fontSize:13,color:"var(--color-text-secondary)",background:"var(--color-background-primary)",border:"1px solid var(--color-border-secondary)",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontFamily:"var(--font-sans)"},
-  mainTabBtn:(active)=>({padding:"10px 18px",fontSize:14,fontWeight:500,fontFamily:"var(--font-sans)",border:"none",borderBottom:active?"2px solid var(--color-text-primary)":"2px solid transparent",background:"transparent",color:active?"var(--color-text-primary)":"var(--color-text-secondary)",cursor:"pointer"}),
-  previewTabBtn:(active)=>({padding:"6px 14px",fontSize:13,fontFamily:"var(--font-sans)",borderRadius:8,border:"1px solid var(--color-border-secondary)",background:active?"#363737":"var(--color-background-secondary)",color:active?"#fff":"var(--color-text-secondary)",cursor:"pointer"}),
+  mainTabBtn:(active)=>({padding:"10px 18px",fontSize:14,fontWeight:500,fontFamily:"var(--font-sans)",border:"none",borderBottom:active?"2px solid var(--color-accent)":"2px solid transparent",background:"transparent",color:active?"var(--color-text-primary)":"var(--color-text-secondary)",cursor:"pointer"}),
+  previewTabBtn:(active)=>({padding:"6px 14px",fontSize:13,fontFamily:"var(--font-sans)",borderRadius:8,border:"1px solid var(--color-border-secondary)",background:active?"var(--color-accent)":"var(--color-background-secondary)",color:active?"#fff":"var(--color-text-secondary)",cursor:"pointer"}),
   stat:{background:"var(--color-background-secondary)",borderRadius:8,padding:"0.55rem 0.85rem",border:"1px solid var(--color-border-secondary)"},
   statLabel:{fontSize:10,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",color:"var(--color-text-tertiary)",marginBottom:2},
   statVal:{fontSize:16,fontWeight:600,color:"var(--color-text-primary)"},
   msgErr:{fontSize:14,color:"var(--color-text-danger)",background:"var(--color-background-danger)",borderRadius:8,padding:"11px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:9},
   msgWarn:{fontSize:14,color:"var(--color-text-warning)",background:"var(--color-background-warning)",borderRadius:8,padding:"11px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:9},
   msgOk:{fontSize:14,color:"var(--color-text-success)",background:"var(--color-background-success)",borderRadius:8,padding:"11px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:9},
-  th:{textAlign:"left",padding:"9px 12px",borderBottom:"1px solid var(--color-border-tertiary)",fontWeight:600,fontSize:13,color:"#111827",whiteSpace:"nowrap"},
+  th:{textAlign:"left",padding:"9px 12px",borderBottom:"1px solid var(--color-border-tertiary)",fontWeight:600,fontSize:13,color:"var(--color-text-primary)",whiteSpace:"nowrap"},
   td:{padding:"9px 12px",fontSize:13,color:"var(--color-text-primary)",whiteSpace:"nowrap"},
 };
 
@@ -210,6 +210,7 @@ export default function App() {
   const [imUpdateSearch, setImUpdateSearch] = useState('');
   const [imUpdateSearchQ, setImUpdateSearchQ] = useState('');
   const [imUpdateDataSource, setImUpdateDataSource] = useState('api');
+  const [imUpdateCacheTs, setImUpdateCacheTs] = useState(()=>{try{const c=localStorage.getItem('sb-im-cache');return c?JSON.parse(c).timestamp:null;}catch(_){return null;}});
   // pdfs: { id, name, base64, status: 'loading'|'queued'|'processing'|'done'|'error', rows, unmatched, error }
   const [pdfs, setPdfs] = useState([]);
   const [pdfDrag, setPdfDrag] = useState(false);
@@ -235,6 +236,9 @@ export default function App() {
       setImUpdateRaw({count:parsed.length,items:parsed});
       setImUpdateStatus('done');
       setImUpdateMsg('');
+      const ts=Date.now();
+      try{localStorage.setItem('sb-im-cache',JSON.stringify({timestamp:ts,items:parsed}));}catch(_){}
+      setImUpdateCacheTs(ts);
     };
     reader.readAsText(file);
   },[]);
@@ -251,14 +255,21 @@ export default function App() {
   const fetchImUpdate = useCallback(async()=>{
     setImUpdateStatus('loading');
     setImUpdateMsg('');
+    const tryCache=()=>{
+      try{
+        const c=localStorage.getItem('sb-im-cache');
+        if(c){const{timestamp,items}=JSON.parse(c);if(items?.length){setImUpdateRaw({count:items.length,items});setImUpdateDataSource('cache');setImUpdateCacheTs(timestamp);setImUpdateStatus('done');setImUpdateMsg('');return true;}}
+      }catch(_){}
+      return false;
+    };
     try{
       const headers={};
       if(!import.meta.env.DEV){const user=netlifyIdentity.currentUser();if(user){const token=await user.jwt();if(token)headers['Authorization']=`Bearer ${token}`;}}
       const res=await fetch('/api/netsuite/itemmaster-restlet?searchId=customsearchitem_master',{headers});
       const data=await res.json();
-      if(data.error){setImUpdateStatus('error');setImUpdateMsg(data.error);}
+      if(data.error){if(!tryCache()){setImUpdateStatus('error');setImUpdateMsg(data.error);}}
       else{setImUpdateRaw(data);setImUpdateStatus('done');setImUpdateDataSource('api');}
-    }catch(e){setImUpdateStatus('error');setImUpdateMsg(e.message||'Network error');}
+    }catch(e){if(!tryCache()){setImUpdateStatus('error');setImUpdateMsg(e.message||'Network error');}}
   },[]);
 
   useEffect(()=>{if(authUser) fetchImUpdate();},[authUser]);
@@ -1203,9 +1214,9 @@ export default function App() {
               const done=i<stepIdx, active=i===stepIdx;
               return (
                 <Fragment key={i}>
-                  {i>0&&<div style={{flex:1,height:1.5,background:done?"var(--color-text-primary)":"var(--color-border-secondary)",borderRadius:1}}/>}
+                  {i>0&&<div style={{flex:1,height:1.5,background:done?"var(--color-accent)":"var(--color-border-secondary)",borderRadius:1}}/>}
                   <div style={{display:"flex",alignItems:"center",gap:5}}>
-                    <div style={{width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,flexShrink:0,background:done||active?"var(--color-text-primary)":"var(--color-background-secondary)",color:done||active?"#fff":"var(--color-text-tertiary)",border:`1.5px solid ${done||active?"var(--color-text-primary)":"var(--color-border-secondary)"}`}}>
+                    <div style={{width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,flexShrink:0,background:done||active?"var(--color-accent)":"var(--color-background-secondary)",color:done||active?"#fff":"var(--color-text-tertiary)",border:`1.5px solid ${done||active?"var(--color-accent)":"var(--color-border-secondary)"}`}}>
                       {done?"✓":i+1}
                     </div>
                     <span style={{fontSize:11,fontWeight:active?700:400,color:active?"var(--color-text-primary)":done?"var(--color-text-secondary)":"var(--color-text-tertiary)",whiteSpace:"nowrap"}}>{label}</span>
@@ -1351,9 +1362,18 @@ export default function App() {
             const matched=imUpdateRaw.items.filter(r=>find(r,'child sku')).length;
             return(
               <div style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:3}}>
-                <span style={{fontSize:13,color:"var(--color-text-success)",fontWeight:500}}>{imUpdateDataSource==='csv'?'CSV':' NetSuite'} · {matched} items</span>
+                <span style={{fontSize:13,color:imUpdateDataSource==='cache'?'#d97706':"var(--color-text-success)",fontWeight:500}}>{imUpdateDataSource==='csv'?'CSV':imUpdateDataSource==='cache'?'Cached CSV':'NetSuite'} · {matched} items</span>
                 <span style={{fontSize:12,color:"var(--color-text-secondary)",textAlign:"left"}}>
-                  {imUpdateDataSource==='csv'?(
+                  {imUpdateDataSource==='cache'?(
+                    <>
+                      API unavailable — loaded from CSV cached on {imUpdateCacheTs?new Date(imUpdateCacheTs).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'unknown date'}.<br/>
+                      <span style={{cursor:"pointer",color:"var(--color-text-secondary)",fontWeight:500,textDecoration:"underline"}} onClick={fetchImUpdate}>Try API again</span>
+                      {" "}or{" "}
+                      <a href="https://4848284.app.netsuite.com/app/common/search/searchresults.nl?searchid=75078&whence=" target="_blank" rel="noreferrer" style={{color:"var(--color-text-secondary)",fontWeight:500}}>download</a>
+                      {" "}/{" "}
+                      <span style={{cursor:"pointer",color:"var(--color-text-secondary)",fontWeight:500,textDecoration:"underline"}} onClick={()=>imUpdateRef.current?.click()}>upload</span>{" updated CSV"}
+                    </>
+                  ):imUpdateDataSource==='csv'?(
                     <>
                       Fetched from manually uploaded CSV.<br/>
                       <span style={{cursor:"pointer",color:"var(--color-text-secondary)",fontWeight:500,textDecoration:"underline"}} onClick={fetchImUpdate}>Fetch from API</span>
@@ -1487,8 +1507,8 @@ export default function App() {
                   <p style={{fontSize:15,fontWeight:500,color:"var(--color-text-primary)",margin:0}}>Upload PDF from SPS Commerce or .rtf from Retail Link</p>
                   <p style={{fontSize:13,color:"var(--color-text-secondary)",margin:"6px 0 0",lineHeight:1.6}}>
                     <br/>
-                    <strong>SPS Commerce:</strong> Log in &gt; Fulfillment &gt; Transactions &gt; check off one or multiple orders &gt; click the three dots on the bottom &gt; Print and save as PDF.<br/><br/>
-                    <strong>Retail Link:</strong> Navigate to Retail Link &gt; Apps &gt; Import PO Delivery &gt; select WAL-MART CANADA CORP. for the 2nd criteria &gt; type in PO #(s) &gt; Add to List &gt; Retrieve Prints &gt; save .rtf file and upload here.
+                    <strong>SPS Commerce:</strong> Log in to SPS Commerce &gt; Fulfillment &gt; Transactions &gt; check off one or multiple orders &gt; click the three dots on the bottom &gt; Print and save as PDF.<br/><br/>
+                    <strong>Retail Link:</strong> Log in to Retail Link &gt; Apps &gt; Import PO Delivery &gt; select WAL-MART CANADA CORP. for the 2nd criteria &gt; type in PO #(s) &gt; Add to List &gt; Retrieve Prints &gt; save .rtf file and upload here.
                   </p>
                 </>
               : <>
@@ -1642,7 +1662,7 @@ export default function App() {
         </div>
 
         {(() => {
-          const sageBtn = {display:"flex",alignItems:"center",gap:6,padding:"10px 18px",fontSize:14,fontWeight:500,fontFamily:"var(--font-sans)",border:"none",borderRadius:8,background:"#154406",color:"#fff",cursor:"pointer",textDecoration:"none"};
+          const sageBtn = {display:"flex",alignItems:"center",gap:6,padding:"10px 18px",fontSize:14,fontWeight:600,fontFamily:"var(--font-sans)",border:"none",borderRadius:8,background:"var(--color-accent)",color:"#fff",cursor:"pointer",textDecoration:"none"};
           const cardStyle = {padding:"16px",background:"var(--color-background-secondary)",border:"1px solid var(--color-border-secondary)",borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",gap:10};
           const titleStyle = {fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",color:"var(--color-text-secondary)"};
           return (

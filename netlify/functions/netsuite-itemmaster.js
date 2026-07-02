@@ -9,7 +9,7 @@ export default async (request, context) => {
     try {
       const parts = bearerToken.split('.');
       if (parts.length !== 3) throw new Error('malformed');
-      const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
       if (payload.exp && Date.now() / 1000 > payload.exp) throw new Error('expired');
     } catch {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {

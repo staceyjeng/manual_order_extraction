@@ -1,26 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
 :root {
   /* App color tokens — light mode */
-  --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
 
-  --color-background-primary: #f0f0f0;
-  --color-background-secondary: #eceef1;
+  --color-background-primary: #F6F7F4;
+  --color-background-secondary: #EBF2EA;
   --color-background-success: #f0fdf4;
   --color-background-danger: #fef2f2;
   --color-background-warning: #fffbeb;
   --color-background-info: #eff6ff;
 
-  --color-border-primary: #d1d5db;
-  --color-border-secondary: #d1d5db;
-  --color-border-tertiary: #e5e7eb;
+  --color-border-primary: #DDE3D9;
+  --color-border-secondary: #DDE3D9;
+  --color-border-tertiary: #E8EDE7;
   --color-border-success: #86efac;
   --color-border-info: #93c5fd;
 
-  --color-text-primary: #111827;
-  --color-text-secondary: #4b5563;
-  --color-text-tertiary: #9ca3af;
+  --color-text-primary: #1C1F1A;
+  --color-text-secondary: #525C50;
+  --color-text-tertiary: #9BA89A;
   --color-text-success: #166534;
   --color-text-danger: #991b1b;
   --color-text-warning: #92400e;
+
+  --color-accent: #5C7A5C;
 
   font-family: var(--font-sans);
   font-size: 16px;
@@ -89,7 +93,7 @@ html.dark body {
 body {
   margin: 0;
   min-height: 100vh;
-  background: #ebebeb;
+  background: #F6F7F4;
 }
 
 /* dark mode disabled
