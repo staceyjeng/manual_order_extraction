@@ -40,8 +40,8 @@ const AB_KEY = "sb-address-book";
 const toTitleCase = s => s ? s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) : s;
 
 const TABS_PREVIEW = [
-  { label: "Header", cols: ["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Freight Account #","SCAC","Memo"] },
-  { label: "Items", cols: ["Item","Customer Part Number","Quantity","Item Rate","Amount","Department Number"] },
+  { label: "Header", cols: ["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Freight Account #","SCAC","Department Number","Memo"] },
+  { label: "Items", cols: ["Item","Customer Part Number","Quantity","Item Rate","Amount"] },
 ];
 const REQUIRED_FIELDS = [
   {label:"Date",key:"Date"},{label:"PO Number",key:"PO Number"},{label:"Name",key:"Customer"},
@@ -73,7 +73,7 @@ const WAL_DI_CSV_HEADERS=["Date","PO Number","Customer","Status","Item","Custome
 function buildWalmartDiCSV(rows){return buildFilteredCSV(WAL_DI_CSV_HEADERS,rows);}
 const HH_CSV_HEADERS=["Date","PO Number","Customer","Status","Item","Customer Part Number","Quantity","Item Rate","Amount","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo","Location"];
 function buildHhCSV(rows){return buildFilteredCSV(HH_CSV_HEADERS,rows);}
-const TJM_CAN_CSV_HEADERS=["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Memo","Item","Customer Part Number","Quantity","Item Rate","Amount","Department Number"];
+const TJM_CAN_CSV_HEADERS=["Date","PO Number","Customer","Status","Location","Ship Date","Cancel Date","Must Arrive By Date","Addressee","Attention","Address 1","Address 2","City","State","Zip","Country","Ship Method","Department Number","Memo","Item","Customer Part Number","Quantity","Item Rate","Amount"];
 function buildTjmCanCSV(rows){return buildFilteredCSV(TJM_CAN_CSV_HEADERS,rows);}
 function buildCpnCSV(rows){const seen=new Set();const lines=[["Customer","Item","Name"]];for(const r of rows){const cpn=String(r["Customer Part Number"]||"").trim();const childSku=String(r["NS SKU"]||"").trim();const parentSku=String(r["Parent SKU"]||"").trim();if(!cpn||!childSku)continue;const item=parentSku?`${parentSku} : ${childSku}`:childSku;const customer=String(r["Customer"]||"").trim();const key=`${customer}|${item}|${cpn}`;if(seen.has(key))continue;seen.add(key);lines.push([customer,item,cpn]);}return lines.map(row=>row.map(v=>esc(v)).join(",")).join("\n");}
 function fmtDate(d){if(!d)return d;const p=String(d).split("/");if(p.length===3&&p[2].length===2){const y=parseInt(p[2],10);p[2]=y<=49?`20${p[2].padStart(2,"0")}`:`19${p[2].padStart(2,"0")}`;}return p.join("/");}
@@ -211,6 +211,7 @@ export default function App() {
   const [imUpdateSearchQ, setImUpdateSearchQ] = useState('');
   const [imUpdateDataSource, setImUpdateDataSource] = useState('api');
   const [imUpdateCacheTs, setImUpdateCacheTs] = useState(()=>{try{const c=localStorage.getItem('sb-im-cache');return c?JSON.parse(c).timestamp:null;}catch(_){return null;}});
+  const [imUpdateApiTs, setImUpdateApiTs] = useState(null);
   // pdfs: { id, name, base64, status: 'loading'|'queued'|'processing'|'done'|'error', rows, unmatched, error }
   const [pdfs, setPdfs] = useState([]);
   const [pdfDrag, setPdfDrag] = useState(false);
@@ -218,6 +219,8 @@ export default function App() {
   const [busyMsg, setBusyMsg] = useState("");
   const [result, setResult] = useState(null);
   const [rows, setRows] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
   const [showHdrCols, setShowHdrCols] = useState(true);
   const [err, setErr] = useState("");
   const [settingsTab, setSettingsTab] = useState("main");
@@ -268,11 +271,12 @@ export default function App() {
       const res=await fetch('/api/netsuite/itemmaster-restlet?searchId=customsearchitem_master',{headers});
       const data=await res.json();
       if(data.error){if(!tryCache()){setImUpdateStatus('error');setImUpdateMsg(data.error);}}
-      else{setImUpdateRaw(data);setImUpdateStatus('done');setImUpdateDataSource('api');}
+      else{setImUpdateRaw(data);setImUpdateStatus('done');setImUpdateDataSource('api');setImUpdateApiTs(Date.now());}
     }catch(e){if(!tryCache()){setImUpdateStatus('error');setImUpdateMsg(e.message||'Network error');}}
   },[]);
 
   useEffect(()=>{if(authUser) fetchImUpdate();},[authUser]);
+  useEffect(()=>{if(!activeSessionId)return;setSessions(prev=>prev.map(s=>s.id===activeSessionId?{...s,rowOverrides}:s));},[rowOverrides]);
 
   useEffect(()=>{const t=setTimeout(()=>setImUpdateSearchQ(imUpdateSearch.trim()),200);return()=>clearTimeout(t);},[imUpdateSearch]);
   useEffect(()=>{const h=e=>{if(addrBookRef.current&&!addrBookRef.current.contains(e.target))setAddrBookOpen(false);};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h);},[]);
@@ -395,6 +399,42 @@ export default function App() {
     if (pdfRef.current) pdfRef.current.value = "";
   };
 
+  const saveSession = (newRows, newResult) => {
+    const ts = Date.now();
+    const id = String(ts);
+    const timeStr = new Date(ts).toLocaleString('en-US', {hour:'numeric',minute:'2-digit'});
+    const session = {
+      id, timestamp: ts,
+      label: `${retailer} · ${newRows.length} item${newRows.length!==1?'s':''} · ${timeStr}`,
+      retailer, shipMethod, orderStatus, memo,
+      gnbDate, gnbUpsAccount, gnbFedexAccount, samplesSubcustomer,
+      rows: newRows, result: newResult, rowOverrides: [],
+    };
+    setSessions(prev => [...prev, session]);
+    setActiveSessionId(id);
+  };
+
+  const loadSessionData = (session) => {
+    setRetailer(session.retailer); setShipMethod(session.shipMethod);
+    setOrderStatus(session.orderStatus); setMemo(session.memo);
+    setGnbDate(session.gnbDate); setGnbUpsAccount(session.gnbUpsAccount);
+    setGnbFedexAccount(session.gnbFedexAccount); setSamplesSubcustomer(session.samplesSubcustomer);
+    setRows(session.rows); setResult(session.result); setRowOverrides(session.rowOverrides||[]);
+    setActiveSessionId(session.id);
+    setPdfs([]); setErr(''); setBusy(false); setBusyMsg('');
+  };
+
+  const loadSession = (id) => { const s=sessions.find(s=>s.id===id); if(s) loadSessionData(s); };
+
+  const deleteSession = (id) => {
+    const remaining = sessions.filter(s => s.id !== id);
+    setSessions(remaining);
+    if (activeSessionId === id) {
+      if (remaining.length > 0) loadSessionData(remaining[remaining.length-1]);
+      else { resetAll(); setActiveSessionId(null); }
+    }
+  };
+
 
   const process = async () => {
     setErr(""); setBusy(true);
@@ -450,7 +490,9 @@ export default function App() {
           });
         });
         setRows(samplesRows);
-        setResult({ totalPOs: orders.length, failedPOs: 0, allUnmatched, allCaseMismatches: [] });
+        const samplesResult = { totalPOs: orders.length, failedPOs: 0, allUnmatched, allCaseMismatches: [] };
+        setResult(samplesResult);
+        saveSession(samplesRows, samplesResult);
         if (addrBookSel === '' && orders.length > 0) {
           const parsedName = (orders[0].shipToName || '').toLowerCase().trim();
           if (parsedName) {
@@ -593,7 +635,9 @@ export default function App() {
 
       setPdfs([...currentPdfs]);
       setRows(allGnbRows);
-      setResult({ totalPOs: pairs.length, failedPOs: currentPdfs.filter(p => p.status === "error").length, allUnmatched: gnbUnmatched, allCaseMismatches: [], skuMismatch });
+      const gnbResult = { totalPOs: pairs.length, failedPOs: currentPdfs.filter(p => p.status === "error").length, allUnmatched: gnbUnmatched, allCaseMismatches: [], skuMismatch };
+      setResult(gnbResult);
+      saveSession(allGnbRows, gnbResult);
       setBusy(false); return;
     }
 
@@ -1103,7 +1147,9 @@ export default function App() {
     const allCasePackViolations = currentPdfs.filter(p => p.status === "done").flatMap(p => p.casePackViolations || []);
     const failedPOs = currentPdfs.filter(p => p.status === "error").length;
     setRows(allRows);
-    setResult({ totalPOs: currentPdfs.filter(p => p.status === "done").length, failedPOs, allUnmatched, allCaseMismatches, allCasePackViolations });
+    const mainResult = { totalPOs: currentPdfs.filter(p => p.status === "done").length, failedPOs, allUnmatched, allCaseMismatches, allCasePackViolations };
+    setResult(mainResult);
+    saveSession(allRows, mainResult);
     setBusy(false);
   };
 
@@ -1231,6 +1277,9 @@ export default function App() {
       {/* Settings tab bar */}
       <div style={{display:"flex",alignItems:"flex-end",borderBottom:"1px solid var(--color-border-secondary)",marginBottom:"0.75rem"}}>
         <button style={S.mainTabBtn(settingsTab==="main")} onClick={()=>setSettingsTab("main")}>Order Import → Export</button>
+        {sessions.length>0&&<button style={S.mainTabBtn(settingsTab==="session-history")} onClick={()=>setSettingsTab("session-history")}>
+          Session History<span style={{marginLeft:6,fontSize:11,fontWeight:700,background:"var(--color-accent)",color:"#fff",borderRadius:10,padding:"1px 6px"}}>{sessions.length}</span>
+        </button>}
         <div style={{flex:1}}/>
         <button
           className={!imUpdateRaw?.items?.length?"im-blink":""}
@@ -1384,7 +1433,7 @@ export default function App() {
                     </>
                   ):(
                     <>
-                      Fetched from customsearchitem_master via API.{" "}
+                      Fetched from customsearchitem_master via API{imUpdateApiTs?' at '+new Date(imUpdateApiTs).toLocaleString('en-US',{hour:'numeric',minute:'2-digit'}):''}.{" "}
                       <span style={{cursor:"pointer",color:"var(--color-text-secondary)",fontWeight:500,textDecoration:"underline"}} onClick={fetchImUpdate}>Refresh</span><br/>
                       <br/>
                       <span style={{color:"var(--color-text-tertiary)"}}>
@@ -1459,6 +1508,24 @@ export default function App() {
       </div>}
 
       {/* Samples text card */}
+      {settingsTab==="session-history"&&<div style={{...S.card,padding:"0.75rem 1rem"}}>
+        <span style={{...S.sectionLabel,display:"block",marginBottom:8}}>Session History</span>
+        {sessions.length===0?(
+          <p style={{fontSize:13,color:"var(--color-text-tertiary)",margin:0}}>No batches processed yet this session.</p>
+        ):(
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {sessions.map(s=>(
+              <div key={s.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",borderRadius:8,border:`1px solid ${s.id===activeSessionId?"var(--color-accent)":"var(--color-border-secondary)"}`,background:s.id===activeSessionId?"rgba(92,122,92,0.06)":"var(--color-background-secondary)"}}>
+                <button onClick={()=>loadSession(s.id)} style={{flex:1,textAlign:"left",fontSize:13,fontFamily:"var(--font-sans)",border:"none",background:"transparent",color:s.id===activeSessionId?"var(--color-accent)":"var(--color-text-primary)",cursor:"pointer",fontWeight:s.id===activeSessionId?600:400,padding:0}}>
+                  {s.label}
+                </button>
+                <button onClick={()=>deleteSession(s.id)} style={{fontSize:13,fontFamily:"var(--font-sans)",border:"none",background:"transparent",color:"var(--color-text-tertiary)",cursor:"pointer",padding:"0 4px",lineHeight:1}}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>}
+
       {settingsTab==="main"&&retailer==="Samples"&&<div style={S.card}>
         <span style={S.sectionLabel}><i className="ti ti-message-2" aria-hidden="true" style={{marginRight:6,fontSize:12,verticalAlign:"-1px"}}/>Sample request</span>
         <textarea
@@ -1571,7 +1638,7 @@ export default function App() {
         <input ref={pdfRef} type="file" accept="application/pdf,.zip,.rtf" multiple style={{display:"none"}} onChange={e=>{handleFiles(e.target.files);e.target.value="";}}/>
       </div>}
 
-      {settingsTab==="main"&&<>
+      {(settingsTab==="main"||settingsTab==="session-history")&&<>
       {err&&<div style={S.msgErr}><i className="ti ti-alert-circle" aria-hidden="true" style={{fontSize:16,flexShrink:0}}/>{err}</div>}
 
       {(busy||(retailer==="Samples"?!!samplesText.trim():queuedCount>0))&&(
